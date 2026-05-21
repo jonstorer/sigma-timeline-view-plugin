@@ -1,0 +1,214 @@
+.timeline-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--sans, system-ui, -apple-system, sans-serif);
+  background: var(--bg, #fff);
+  color: var(--text, #1f2937);
+  font-size: 13px;
+}
+
+.timeline-header {
+  padding: 8px 16px 6px;
+  border-bottom: 1px solid #eef0f3;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-header-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.timeline-header h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.timeline-sub {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.timeline-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.timeline-zoom-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.timeline-zoom-btn:active {
+  background: #e5e7eb;
+}
+
+.timeline-zoom-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+.timeline-host {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---- vis-timeline overrides --------------------------------------- */
+
+.timeline-host .vis-timeline {
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+/* Time axis: muted */
+.timeline-host .vis-time-axis .vis-grid.vis-minor {
+  border-color: #f1f3f5;
+}
+.timeline-host .vis-time-axis .vis-grid.vis-major {
+  border-color: #e5e7eb;
+}
+.timeline-host .vis-time-axis .vis-text {
+  color: #6b7280;
+  font-size: 11px;
+}
+.timeline-host .vis-time-axis .vis-text.vis-major {
+  color: #374151;
+  font-weight: 500;
+}
+.timeline-host .vis-panel.vis-top {
+  border-bottom: 1px solid #eef0f3;
+}
+
+/* Group rail (left) */
+.timeline-host .vis-labelset .vis-label {
+  border-bottom: 6px solid #fff;
+  background: #f3f4f6;
+  min-height: 64px;
+}
+.timeline-host .vis-labelset .vis-label .vis-inner {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+}
+.timeline-host .vis-panel.vis-left {
+  border-right: 1px solid #e5e7eb;
+}
+
+/* Swimlane body — match the left rail. Border-bottom is white so the
+   underlying timeline-root background reads as a gap between lanes. */
+.timeline-host .vis-foreground .vis-group {
+  background-color: #f3f4f6;
+  border-bottom: 6px solid #fff;
+  min-height: 64px;
+}
+
+/* Reset default range item look */
+.timeline-host .vis-item.vis-range {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #1f2937;
+  min-height: 26px;
+  /* inline style adds inset shadow for status color when applicable */
+}
+.timeline-host .vis-item.vis-range.vis-selected {
+  border-color: #93c5fd;
+  background: #ffffff;
+}
+.timeline-host .vis-item.vis-range .vis-item-content {
+  padding: 4px 10px 4px 12px;
+  line-height: 18px;
+}
+.timeline-host .vis-item.vis-range .vis-item-overflow {
+  overflow: hidden;
+}
+
+/* Drag handles */
+.timeline-host .vis-item .vis-drag-left,
+.timeline-host .vis-item .vis-drag-right {
+  width: 6px;
+}
+
+/* ---- Custom item content layout ----------------------------------- */
+
+.ts-item-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ts-status-chip {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+
+.ts-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  color: #fff;
+  background-color: #6b7280;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.ts-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-weight: 500;
+}
+
+/* ---- Monday emphasis --------------------------------------------- */
+/* vis-timeline applies `.vis-monday` (and other weekday classes) to grid
+   cells whenever the time-axis scale is `weekday` or `day` with step <= 2.
+   At larger zooms the minor scale is `week`, so every minor grid line is
+   already a Monday and needs no extra class. */
+
+.timeline-host .vis-time-axis .vis-grid.vis-vertical.vis-monday {
+  border-left: 1px solid rgba(99, 102, 241, 0.6);
+}
+
+.timeline-host .vis-time-axis .vis-text.vis-minor.vis-monday {
+  color: #4338ca;
+  font-weight: 600;
+}
+
