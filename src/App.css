@@ -14,6 +14,14 @@
   padding: 8px 16px 6px;
   border-bottom: 1px solid #eef0f3;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-header-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .timeline-header h1 {
@@ -26,6 +34,44 @@
   margin: 2px 0 0;
   font-size: 11px;
   color: #6b7280;
+}
+
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.timeline-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.timeline-zoom-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.timeline-zoom-btn:active {
+  background: #e5e7eb;
+}
+
+.timeline-zoom-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
 }
 
 .timeline-host {
@@ -69,6 +115,9 @@
 }
 .timeline-host .vis-labelset .vis-label .vis-inner {
   padding: 10px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
 }
 .timeline-host .vis-panel.vis-left {
   border-right: 1px solid #e5e7eb;
@@ -163,23 +212,3 @@
   font-weight: 600;
 }
 
-/* ---- Custom group label layout ------------------------------------ */
-
-.ts-group-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  line-height: 1.25;
-}
-
-.ts-group-name {
-  font-weight: 600;
-  font-size: 13px;
-  color: #111827;
-}
-
-.ts-group-subtitle {
-  font-size: 11px;
-  color: #6b7280;
-  font-weight: 400;
-}

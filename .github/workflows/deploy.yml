@@ -1,0 +1,71 @@
+name: Deploy to S3
+
+# Triggers
+#   - push to staging / production:  deploys to the matching environment
+#   - workflow_dispatch:              deploys manually, pick the target env
+on:
+  push:
+    branches: [production, staging]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Environment to deploy
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+# OIDC auth to AWS — no long-lived access keys in the repo. Requires:
+#   1. An IAM OIDC provider for token.actions.githubusercontent.com.
+#   2. An IAM role whose trust policy allows this repo to assume it.
+#   3. The role's permission policy granting s3:PutObject / s3:DeleteObject
+#      / s3:ListBucket on the bucket (and cloudfront:CreateInvalidation if
+#      you set CLOUDFRONT_DISTRIBUTION_ID).
+#
+# Per-environment variables (Settings → Environments → <env> → Variables):
+#   AWS_DEPLOY_ROLE_ARN         arn:aws:iam::123456789012:role/sigma-plugin-deploy
+#   AWS_REGION                  us-east-1
+#   S3_BUCKET                   sigma-timeline-plugin-<env>
+#   CLOUDFRONT_DISTRIBUTION_ID  E1ABCDEF... (optional)
+permissions:
+  id-token: write
+  contents: read
+
+# Serialize deploys per environment so two pushes can't race.
+concurrency:
+  group: deploy-${{ github.event.inputs.target || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # On push, github.ref_name is the branch ('production' or 'staging').
+    # On workflow_dispatch, fall back to the chosen input.
+    environment: ${{ github.event.inputs.target || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: npm run deploy
+        env:
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}

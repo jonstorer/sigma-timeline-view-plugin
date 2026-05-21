@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:GetObject"],
+      "Resource": [
+        "arn:aws:s3:::sigma-timeline-plugin-staging/*",
+        "arn:aws:s3:::sigma-timeline-plugin-production/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::sigma-timeline-plugin-staging",
+        "arn:aws:s3:::sigma-timeline-plugin-production"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["cloudfront:CreateInvalidation"],
+      "Resource": [
+        "arn:aws:cloudfront::451177138610:distribution/E3CFZX19445WJ8",
+        "arn:aws:cloudfront::451177138610:distribution/E2WWGYO6ULMSZZ"
+      ]
+    }
+  ]
+}

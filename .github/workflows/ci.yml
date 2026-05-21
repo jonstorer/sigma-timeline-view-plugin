@@ -1,0 +1,31 @@
+name: CI
+
+# Runs lint + typecheck + tests on every push and pull request.
+# Independent of the deploy workflow — this gate doesn't need AWS creds.
+on:
+  push:
+  pull_request:
+
+# Cancel an in-progress run if the same branch / PR gets another push.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm test
