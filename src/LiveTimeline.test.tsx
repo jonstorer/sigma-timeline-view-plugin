@@ -13,6 +13,7 @@ vi.mock('vis-timeline/esnext', async () => {
     ...actual,
     Timeline: vi.fn().mockImplementation(() => ({
       destroy: vi.fn(),
+      setGroups: vi.fn(),
     })),
   }
 })
@@ -36,9 +37,27 @@ describe('LiveTimeline', () => {
         legendData={undefined}
       />,
     )
-    expect(
-      getByText(/Pick Start, End, and Group columns/i),
-    ).toBeInTheDocument()
+    expect(getByText(/Pick Start and End columns/i)).toBeInTheDocument()
+  })
+
+  test('reports just an item count when no group columns configured', () => {
+    const config = {
+      [SOURCE]: 'element-1',
+      start: 'start_col',
+      end: 'end_col',
+      label: 'label_col',
+      idColumn: 'id_col',
+    }
+    const data = {
+      start_col: ['2026-05-01', '2026-05-08'],
+      end_col: ['2026-05-08', '2026-05-15'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const { getByText } = render(
+      <LiveTimeline config={config} data={data} legendData={undefined} />,
+    )
+    expect(getByText(/^2 items\.$/)).toBeInTheDocument()
   })
 
   test('reports item and lane counts when fully configured', () => {
