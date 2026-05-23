@@ -65,8 +65,11 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
         minorLabels: { week: 'MMM D' },
         majorLabels: { week: 'MMMM YYYY' },
       },
+      // `margin.item.vertical` doubles as "gap between stacked items" AND
+      // "buffer below the bottom-most stacked item" — bumping it gives lanes
+      // breathing room so items don't crowd the bottom edge.
       margin: {
-        item: { vertical: 12, horizontal: 10 },
+        item: { vertical: 14, horizontal: 10 },
         axis: 24,
       },
       verticalScroll: true,
@@ -88,20 +91,35 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
     }
   }, [])
 
-  // Push items + groups updates whenever the data builds change
+  // Push items + groups updates whenever the data builds change.
+  // vis-timeline needs an explicit setGroups(null) to switch to ungrouped
+  // mode — passing an empty DataSet alone causes items without a `group`
+  // field to be dropped from the render.
   useEffect(() => {
     const itemsDs = itemsDsRef.current
     const groupsDs = groupsDsRef.current
-    if (!itemsDs || !groupsDs) return
+    const tl = timelineRef.current
+    if (!itemsDs || !groupsDs || !tl) return
     itemsDs.clear()
     groupsDs.clear()
-    groupsDs.add(groups)
+    if (groups.length > 0) {
+      groupsDs.add(groups)
+      tl.setGroups(groupsDs)
+    } else {
+      tl.setGroups(undefined)
+    }
     itemsDs.add(items)
   }, [items, groups])
 
   const hasSource = Boolean(config?.[SOURCE])
-  const missingCols =
-    !config?.start || !config?.end || !config?.group ? true : false
+  const missingCols = !config?.start || !config?.end
+
+  // With multi-level grouping, `groups` includes parent rows. The user-facing
+  // "lane" count should reflect only leaf swimlanes (no nested children).
+  // When no group columns are configured, items render flat with no lanes.
+  const laneCount = groups.filter(
+    (g) => !g.nestedGroups || g.nestedGroups.length === 0,
+  ).length
 
   const zoomIn = () => timelineRef.current?.zoomIn(0.3)
   const zoomOut = () => timelineRef.current?.zoomOut(0.3)
@@ -115,8 +133,10 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
             {!hasSource
               ? 'Pick a data source in the editor panel.'
               : missingCols
-                ? 'Pick Start, End, and Group columns in the editor panel.'
-                : `${items.length} item${items.length === 1 ? '' : 's'} across ${groups.length} lane${groups.length === 1 ? '' : 's'}.`}
+                ? 'Pick Start and End columns in the editor panel.'
+                : laneCount === 0
+                  ? `${items.length} item${items.length === 1 ? '' : 's'}.`
+                  : `${items.length} item${items.length === 1 ? '' : 's'} across ${laneCount} lane${laneCount === 1 ? '' : 's'}.`}
           </p>
         </div>
         <div className="timeline-toolbar">

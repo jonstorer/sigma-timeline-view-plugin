@@ -26,9 +26,9 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'group',
     type: 'column',
-    label: 'Group by (assignee / project)',
+    label: 'Group by (top → bottom of hierarchy)',
     source: SOURCE,
-    allowMultiple: false,
+    allowMultiple: true,
   },
 
   {

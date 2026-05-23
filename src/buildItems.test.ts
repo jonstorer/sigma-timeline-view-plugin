@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest'
 import {
   buildColorByStatus,
   buildItemsAndGroups,
+  buildPathsForRow,
   parseGroupCell,
+  pathToGroupId,
   safeId,
 } from './buildItems'
 
@@ -340,5 +342,332 @@ describe('buildItemsAndGroups', () => {
     }
     const result = buildItemsAndGroups(baseConfig, data, new Map())
     expect(result.items[0].id).toBe('weird\\|id|Alice')
+  })
+
+  test('no group column → items render ungrouped, no groups emitted', () => {
+    const data = {
+      start_col: ['2026-05-01', '2026-05-08'],
+      end_col: ['2026-05-08', '2026-05-15'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const result = buildItemsAndGroups(
+      {
+        start: 'start_col',
+        end: 'end_col',
+        label: 'label_col',
+        idColumn: 'id_col',
+      },
+      data,
+      new Map(),
+    )
+    expect(result.groups).toEqual([])
+    expect(result.items).toHaveLength(2)
+    // Items must not carry a `group` field — vis-timeline renders them flat.
+    expect(result.items[0]).not.toHaveProperty('group')
+    expect(result.items[0].id).toBe('r1')
+    expect(result.items[1].id).toBe('r2')
+  })
+
+  test('empty group array also renders ungrouped', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      label_col: ['T'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { ...baseConfig, group: [] },
+      data,
+      new Map(),
+    )
+    expect(result.groups).toEqual([])
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).not.toHaveProperty('group')
+  })
+
+  test('ungrouped items still carry status visuals', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      label_col: ['T'],
+      id_col: ['r1'],
+      status_col: ['On Track'],
+    }
+    const result = buildItemsAndGroups(
+      {
+        start: 'start_col',
+        end: 'end_col',
+        label: 'label_col',
+        idColumn: 'id_col',
+        statusColumn: 'status_col',
+      },
+      data,
+      new Map([['On Track', '#22c55e']]),
+    )
+    expect(result.items[0].style).toBe('box-shadow: inset 5px 0 0 #22c55e;')
+    expect(result.visuals.get('r1')).toEqual({ chipColor: '#22c55e' })
+  })
+
+  test('group column may be passed as a single-element array', () => {
+    // Sigma's allowMultiple:true returns an array even with one selection.
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      group_col: ['Alice'],
+      label_col: ['T'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { ...baseConfig, group: ['group_col'] },
+      data,
+      new Map(),
+    )
+    expect(result.items).toHaveLength(1)
+    expect(result.groups).toEqual([{ id: 'Alice', content: 'Alice' }])
+  })
+})
+
+describe('pathToGroupId', () => {
+  test('joins path segments with pipe', () => {
+    expect(pathToGroupId(['NA', 'Team Alpha', 'Alice'], 2)).toBe(
+      'NA|Team Alpha|Alice',
+    )
+  })
+
+  test('slices to the requested level', () => {
+    const path = ['NA', 'Team Alpha', 'Alice']
+    expect(pathToGroupId(path, 0)).toBe('NA')
+    expect(pathToGroupId(path, 1)).toBe('NA|Team Alpha')
+  })
+
+  test('escapes pipes in segments', () => {
+    expect(pathToGroupId(['a|b', 'c'], 1)).toBe('a\\|b|c')
+  })
+})
+
+describe('buildPathsForRow', () => {
+  test('all single values → one path', () => {
+    const paths = buildPathsForRow([
+      { values: ['NA'], wasMulti: false },
+      { values: ['Alpha'], wasMulti: false },
+      { values: ['Alice'], wasMulti: false },
+    ])
+    expect(paths).toEqual([['NA', 'Alpha', 'Alice']])
+  })
+
+  test('single × multi produces one path per value in the multi cell', () => {
+    // team=A (single), assignee=[alice,bob] (multi) → 2 paths, both under A
+    const paths = buildPathsForRow([
+      { values: ['Team A'], wasMulti: false },
+      { values: ['Alice', 'Bob'], wasMulti: true },
+    ])
+    expect(paths).toEqual([
+      ['Team A', 'Alice'],
+      ['Team A', 'Bob'],
+    ])
+  })
+
+  test('multi × multi produces the full cartesian product', () => {
+    // team=[A,B], assignee=[alice,bob] → 4 paths
+    const paths = buildPathsForRow([
+      { values: ['Team A', 'Team B'], wasMulti: true },
+      { values: ['Alice', 'Bob'], wasMulti: true },
+    ])
+    expect(paths).toEqual([
+      ['Team A', 'Alice'],
+      ['Team A', 'Bob'],
+      ['Team B', 'Alice'],
+      ['Team B', 'Bob'],
+    ])
+  })
+
+  test('uneven multi lengths still produce the full cartesian product', () => {
+    // team=[A,B,C], assignee=[alice,bob] → 3×2 = 6 paths, nothing dropped
+    const paths = buildPathsForRow([
+      { values: ['A', 'B', 'C'], wasMulti: true },
+      { values: ['alice', 'bob'], wasMulti: true },
+    ])
+    expect(paths).toHaveLength(6)
+    expect(paths).toEqual([
+      ['A', 'alice'],
+      ['A', 'bob'],
+      ['B', 'alice'],
+      ['B', 'bob'],
+      ['C', 'alice'],
+      ['C', 'bob'],
+    ])
+  })
+
+  test('three levels of multi-values expand correctly', () => {
+    // region=[NA,EU] × team=[A,B] × person=[alice,bob] → 8 paths
+    const paths = buildPathsForRow([
+      { values: ['NA', 'EU'], wasMulti: true },
+      { values: ['A', 'B'], wasMulti: true },
+      { values: ['alice', 'bob'], wasMulti: true },
+    ])
+    expect(paths).toHaveLength(8)
+  })
+
+  test('any empty cell drops the row', () => {
+    const paths = buildPathsForRow([
+      { values: ['A'], wasMulti: false },
+      { values: [], wasMulti: false },
+    ])
+    expect(paths).toEqual([])
+  })
+
+  test('empty input yields no paths', () => {
+    expect(buildPathsForRow([])).toEqual([])
+  })
+})
+
+describe('buildItemsAndGroups — multi-level', () => {
+  const config = {
+    start: 'start_col',
+    end: 'end_col',
+    group: ['team_col', 'person_col'],
+    label: 'label_col',
+    idColumn: 'id_col',
+  }
+
+  test('two levels emit parent + leaf groups with nestedGroups wired up', () => {
+    const data = {
+      start_col: ['2026-05-01', '2026-05-01'],
+      end_col: ['2026-05-08', '2026-05-08'],
+      team_col: ['Alpha', 'Beta'],
+      person_col: ['Alice', 'Bob'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const result = buildItemsAndGroups(config, data, new Map())
+
+    // Two items, each placed in its leaf group
+    expect(result.items.map((i) => i.group).sort()).toEqual([
+      'Alpha|Alice',
+      'Beta|Bob',
+    ])
+
+    // Four groups: two parents (Alpha, Beta) + two leaves
+    expect(result.groups.map((g) => g.id).sort()).toEqual([
+      'Alpha',
+      'Alpha|Alice',
+      'Beta',
+      'Beta|Bob',
+    ])
+
+    const alpha = result.groups.find((g) => g.id === 'Alpha')!
+    expect(alpha.content).toBe('Alpha')
+    expect(alpha.nestedGroups).toEqual(['Alpha|Alice'])
+
+    const alphaAlice = result.groups.find((g) => g.id === 'Alpha|Alice')!
+    expect(alphaAlice.content).toBe('Alice')
+    expect(alphaAlice.nestedGroups).toBeUndefined()
+  })
+
+  test('siblings sharing a parent share one parent row', () => {
+    const data = {
+      start_col: ['2026-05-01', '2026-05-01'],
+      end_col: ['2026-05-08', '2026-05-08'],
+      team_col: ['Alpha', 'Alpha'],
+      person_col: ['Alice', 'Bob'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const result = buildItemsAndGroups(config, data, new Map())
+    const alpha = result.groups.find((g) => g.id === 'Alpha')!
+    expect(alpha.nestedGroups).toEqual(['Alpha|Alice', 'Alpha|Bob'])
+  })
+
+  test('multi-value cells at multiple levels fan out cartesian-style', () => {
+    // Item with two teams and two assignees: one row, four leaf lanes.
+    // The item appears under every combination of team × assignee.
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      team_col: [['Alpha', 'Beta']],
+      person_col: [['Alice', 'Bob']],
+      label_col: ['Cross-team'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data, new Map())
+    expect(result.items).toHaveLength(4)
+    expect(result.items.map((i) => i.group).sort()).toEqual([
+      'Alpha|Alice',
+      'Alpha|Bob',
+      'Beta|Alice',
+      'Beta|Bob',
+    ])
+  })
+
+  test('nested children are sorted alphabetically by content', () => {
+    const data = {
+      start_col: ['2026-05-01', '2026-05-01', '2026-05-01'],
+      end_col: ['2026-05-08', '2026-05-08', '2026-05-08'],
+      team_col: ['Alpha', 'Alpha', 'Alpha'],
+      person_col: ['Zach', 'Alice', 'Mike'],
+      label_col: ['', '', ''],
+      id_col: ['r1', 'r2', 'r3'],
+    }
+    const result = buildItemsAndGroups(config, data, new Map())
+    const alpha = result.groups.find((g) => g.id === 'Alpha')!
+    expect(alpha.nestedGroups).toEqual([
+      'Alpha|Alice',
+      'Alpha|Mike',
+      'Alpha|Zach',
+    ])
+  })
+
+  test('three levels of nesting build a full chain', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      region_col: ['NA'],
+      team_col: ['Alpha'],
+      person_col: ['Alice'],
+      label_col: ['T'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      {
+        start: 'start_col',
+        end: 'end_col',
+        group: ['region_col', 'team_col', 'person_col'],
+        label: 'label_col',
+        idColumn: 'id_col',
+      },
+      data,
+      new Map(),
+    )
+    expect(result.groups.map((g) => g.id).sort()).toEqual([
+      'NA',
+      'NA|Alpha',
+      'NA|Alpha|Alice',
+    ])
+    const na = result.groups.find((g) => g.id === 'NA')!
+    expect(na.nestedGroups).toEqual(['NA|Alpha'])
+    const naAlpha = result.groups.find((g) => g.id === 'NA|Alpha')!
+    expect(naAlpha.nestedGroups).toEqual(['NA|Alpha|Alice'])
+    // Parents emitted before leaves (stable order for debugging).
+    const ids = result.groups.map((g) => g.id)
+    expect(ids.indexOf('NA')).toBeLessThan(ids.indexOf('NA|Alpha'))
+    expect(ids.indexOf('NA|Alpha')).toBeLessThan(ids.indexOf('NA|Alpha|Alice'))
+  })
+
+  test('item id encodes the full leaf path so siblings are unique per parent', () => {
+    // Same person under different teams must not collide.
+    const data = {
+      start_col: ['2026-05-01', '2026-05-01'],
+      end_col: ['2026-05-08', '2026-05-08'],
+      team_col: ['Alpha', 'Beta'],
+      person_col: ['Alice', 'Alice'],
+      label_col: ['A1', 'A2'],
+      id_col: ['r1', 'r2'],
+    }
+    const result = buildItemsAndGroups(config, data, new Map())
+    expect(result.items.map((i) => i.id).sort()).toEqual([
+      'r1|Alpha|Alice',
+      'r2|Beta|Alice',
+    ])
   })
 })

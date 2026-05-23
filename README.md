@@ -18,9 +18,14 @@ and exposes its config slots in Sigma's editor panel.
 
 ## What it does
 
-- One swimlane per unique value in the configured **Group by** column.
+- One swimlane per unique value in the configured **Group by** column(s).
+  Pick multiple columns to build a nested hierarchy (e.g. Region → Team →
+  Assignee) — vis-timeline renders each parent level as a collapsible header
+  above its children.
 - Multi-value group cells (JSON array, comma list, or Sigma variant) produce
-  one item per value, each in its own swimlane.
+  one item per value, each in its own swimlane. With multiple group columns
+  and several multi-value cells on the same row, the values are paired by
+  index, not cartesian-producted — see [Multi-level grouping](#multi-level-grouping).
 - Drag an item horizontally to change its time; drag it between lanes to
   change its group assignment. Both edits round-trip to the source row via
   the Sigma Action API.
@@ -42,7 +47,7 @@ and exposes its config slots in Sigma's editor panel.
 | `start` | column (datetime) | Item start. |
 | `end` | column (datetime) | Item end. |
 | `label` | column (text/number) | Text shown on the item bar. |
-| `group` | column | Swimlane assignment. Single value or multi-value (array / comma list). |
+| `group` | column (multi) | Swimlane assignment. Leave empty to render items flat (no lanes), pick one column for a flat list of lanes, or several in order (top → bottom) for nested groups. Each column may hold single or multi-value cells. |
 | `idColumn` | column | Row id. Required if you want to persist edits. |
 
 ### Edit existing item (optional)
@@ -82,6 +87,30 @@ Wire these to enable double-click-to-create.
 | `featureStatusColumn` | column | A second enum column; rendered as a small colored chip inside the item. Uses the same `statusLegend`. |
 | `pillLabelColumn` | column | Text shown as a Bootstrap-style pill on the left of the item. |
 | `groupSubtitle` | text | Subtitle under each swimlane name (e.g. "Objective", "Assignee"). |
+
+### Multi-level grouping
+
+The **Group by** slot accepts an ordered list of columns. The first column is
+the top of the hierarchy; the last is the leaf swimlane where items actually
+sit.
+
+Multi-value cells (a row whose group cell holds an array / JSON list / comma
+list) are fanned out as the **cartesian product** of every level — the item
+shows up in every combination of values:
+
+- All single-valued cells on a row → one path through the hierarchy → the
+  item appears once.
+- One multi-valued cell on a row → one path per value in that cell.
+- Multi-valued cells at two or more levels → every combination. E.g. a row
+  with `team = ["Alpha", "Beta"]` and `person = ["Alice", "Bob"]` produces
+  four paths: `Alpha > Alice`, `Alpha > Bob`, `Beta > Alice`, `Beta > Bob`.
+- Different-length arrays still expand fully: `team = [A, B, C]` and
+  `person = [alice, bob]` produces 6 paths (3 × 2).
+- A row with any empty group cell is skipped entirely.
+
+This means an item tagged with multiple teams AND multiple people appears in
+every team's view of every person — useful when the multi-value cells are
+independent "memberships" rather than a paired list.
 
 ### Lazy load by visible window (optional)
 
