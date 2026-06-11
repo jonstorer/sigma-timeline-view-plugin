@@ -57,6 +57,19 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     allowMultiple: false,
   },
 
+  {
+    name: 'editPayloadVariable',
+    type: 'variable',
+    label: 'Edit payload variable (text, holds JSON: {id,start,end})',
+    allowedTypes: ['text'],
+  },
+
+  {
+    name: 'editAction',
+    type: 'action-trigger',
+    label: 'Edit action',
+  },
+
   { name: STATUS_LEGEND, type: 'element', label: 'Status legend table' },
 
   {

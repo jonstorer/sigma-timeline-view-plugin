@@ -14,12 +14,49 @@ vi.mock('vis-timeline/esnext', async () => {
     Timeline: vi.fn().mockImplementation(() => ({
       destroy: vi.fn(),
       setGroups: vi.fn(),
+      setOptions: vi.fn(),
     })),
   }
 })
 
+import { DataSet } from 'vis-data'
+import { Timeline } from 'vis-timeline/esnext'
 import { LiveTimeline } from './LiveTimeline'
 import { SOURCE } from './editorPanel'
+
+type CapturedOptions = {
+  editable: { updateTime: boolean }
+  onMove: (
+    item: { id: unknown; start: Date; end: Date | null },
+    callback: (item: unknown) => void,
+  ) => void
+}
+
+// LiveTimeline calls `new Timeline(container, items, groups, options)`, but
+// vis-timeline's constructor type only declares 3 params, so the options live
+// at index 3 of an untyped-length tuple — widen to unknown[] to read it.
+const lastTimelineOptions = () =>
+  (vi.mocked(Timeline).mock.calls.at(-1)! as unknown[])[3] as CapturedOptions
+
+const lastTimelineInstance = () =>
+  vi.mocked(Timeline).mock.results.at(-1)!.value as {
+    setOptions: ReturnType<typeof vi.fn>
+    setGroups: ReturnType<typeof vi.fn>
+  }
+
+const oneRowConfig = {
+  [SOURCE]: 'element-1',
+  start: 'start_col',
+  end: 'end_col',
+  label: 'label_col',
+  idColumn: 'id_col',
+}
+const oneRowData = {
+  start_col: ['2026-05-01'],
+  end_col: ['2026-05-08'],
+  label_col: ['T'],
+  id_col: ['r1'],
+}
 
 describe('LiveTimeline', () => {
   test('prompts for a data source when none configured', () => {
@@ -102,5 +139,132 @@ describe('LiveTimeline', () => {
       <LiveTimeline config={config} data={data} legendData={undefined} />,
     )
     expect(getByText(/1 item across 1 lane\./i)).toBeInTheDocument()
+  })
+})
+
+describe('LiveTimeline drag editing', () => {
+  test('constructs read-only when no edit handler is provided', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+      />,
+    )
+    expect(lastTimelineOptions().editable.updateTime).toBe(false)
+  })
+
+  test('constructs draggable when an edit handler is provided at mount', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    expect(lastTimelineOptions().editable.updateTime).toBe(true)
+  })
+
+  test('enables editing and re-issues items when the edit handler is wired after mount', () => {
+    const { rerender } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+      />,
+    )
+
+    const instance = lastTimelineInstance()
+    instance.setOptions.mockClear()
+    const updateSpy = vi.spyOn(DataSet.prototype, 'update')
+
+    rerender(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={vi.fn()}
+      />,
+    )
+
+    expect(instance.setOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editable: expect.objectContaining({ updateTime: true }),
+      }),
+    )
+    expect(updateSpy).toHaveBeenCalled()
+
+    updateSpy.mockRestore()
+  })
+
+  test('onMove maps the dragged item to a payload and accepts the move', () => {
+    const onItemEdit = vi.fn()
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={onItemEdit}
+      />,
+    )
+
+    const callback = vi.fn()
+    const moved = {
+      id: 'r1',
+      start: new Date('2026-05-02T00:00:00.000Z'),
+      end: new Date('2026-05-09T00:00:00.000Z'),
+    }
+    lastTimelineOptions().onMove(moved, callback)
+
+    expect(onItemEdit).toHaveBeenCalledWith({
+      id: 'r1',
+      start: '2026-05-02T00:00:00.000Z',
+      end: '2026-05-09T00:00:00.000Z',
+    })
+    expect(callback).toHaveBeenCalledWith(moved)
+  })
+
+  test('onMove cancels the move when no edit handler is wired', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+      />,
+    )
+
+    const callback = vi.fn()
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date('2026-05-02'), end: new Date('2026-05-09') },
+      callback,
+    )
+
+    expect(callback).toHaveBeenCalledWith(null)
+  })
+
+  test('switches the Timeline to ungrouped mode with setGroups(undefined) when no group columns', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+      />,
+    )
+    expect(lastTimelineInstance().setGroups).toHaveBeenCalledWith(undefined)
+  })
+
+  test('passes a groups DataSet to setGroups when group columns are configured', () => {
+    render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, group: 'group_col' }}
+        data={{ ...oneRowData, group_col: ['Alice'] }}
+        legendData={undefined}
+      />,
+    )
+    expect(lastTimelineInstance().setGroups).toHaveBeenCalledWith(
+      expect.any(DataSet),
+    )
+    expect(lastTimelineInstance().setGroups).not.toHaveBeenCalledWith(undefined)
   })
 })

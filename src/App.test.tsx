@@ -1,11 +1,18 @@
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { render } from '@testing-library/react'
-import { useEditorPanelConfig } from '@sigmacomputing/plugin'
+import {
+  useActionTrigger,
+  useConfig,
+  useEditorPanelConfig,
+  useVariable,
+} from '@sigmacomputing/plugin'
 
 vi.mock('@sigmacomputing/plugin', () => ({
   useEditorPanelConfig: vi.fn(),
   useConfig: vi.fn(() => ({})),
   useElementData: vi.fn(() => ({})),
+  useVariable: vi.fn(() => [undefined, vi.fn()]),
+  useActionTrigger: vi.fn(() => vi.fn()),
 }))
 
 vi.mock('./LiveTimeline', () => ({
@@ -35,5 +42,28 @@ describe('App', () => {
   test('renders the LiveTimeline child', () => {
     const { getByTestId } = render(<App />)
     expect(getByTestId('live-timeline-stub')).toBeInTheDocument()
+  })
+})
+
+describe('App edit-slot wiring', () => {
+  afterEach(() => {
+    vi.mocked(useConfig).mockReturnValue({})
+  })
+
+  test('passes the resolved control id and action id (config values), not the literal config keys, to the SDK hooks', () => {
+    vi.mocked(useVariable).mockClear()
+    vi.mocked(useActionTrigger).mockClear()
+    vi.mocked(useConfig).mockReturnValue({
+      idColumn: 'row_id',
+      editPayloadVariable: 'Payload',
+      editAction: 'action-abc-123',
+    })
+
+    render(<App />)
+
+    expect(vi.mocked(useVariable)).toHaveBeenCalledWith('Payload')
+    expect(vi.mocked(useVariable)).not.toHaveBeenCalledWith('editPayloadVariable')
+    expect(vi.mocked(useActionTrigger)).toHaveBeenCalledWith('action-abc-123')
+    expect(vi.mocked(useActionTrigger)).not.toHaveBeenCalledWith('editAction')
   })
 })

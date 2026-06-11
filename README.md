@@ -26,12 +26,9 @@ and exposes its config slots in Sigma's editor panel.
   one item per value, each in its own swimlane. With multiple group columns
   and several multi-value cells on the same row, the values are paired by
   index, not cartesian-producted — see [Multi-level grouping](#multi-level-grouping).
-- Drag an item horizontally to change its time; drag it between lanes to
-  change its group assignment. Both edits round-trip to the source row via
-  the Sigma Action API.
-- Drag start/end snap to the previous Monday (week-aligned moves).
-- Double-click empty lane area to create a new item; new items are seeded
-  with the dropped lane's group value and a 1-week duration.
+- Drag an item horizontally to change its start/end; the new times round-
+  trip to the source row via the Sigma Action API as a single JSON payload.
+  Lane reassignment and double-click-create are not yet wired.
 - Optional status color bar on the left edge of each item, plus an optional
   small colored chip and/or text pill inside the item.
 - Visible-window range (start + end) is pushed to workbook variables on every
@@ -52,29 +49,28 @@ and exposes its config slots in Sigma's editor panel.
 
 ### Edit existing item (optional)
 
-Wire these to enable drag-to-edit. The plugin writes the new values to
-workbook variables and triggers a single Sigma Action.
+Wire both slots to enable drag-to-edit on item start/end. On drop, the
+plugin writes a JSON payload to the text variable and fires the action.
 
 | Slot | Type | Purpose |
 |---|---|---|
-| `editIdVariable` | variable (text/number) | Receives the edited row id. |
-| `editStartVariable` | variable (date) | Receives the new start. |
-| `editEndVariable` | variable (date) | Receives the new end. |
-| `editGroupVariable` | variable (text) | New group: bare value if the source cell was a single value, JSON array if the source cell held multiple. |
-| `editAction` | action-trigger | Fires after the variables are set. |
-| `confirmGroupChange` | checkbox | Prompts a `window.confirm` before reassigning lanes. |
+| `editPayloadVariable` | variable (text) | Receives `{"id": <rowId>, "start": "<ISO>", "end": "<ISO>"}`. |
+| `editAction` | action-trigger | Fires after the variable is set. |
 
-### Add new item (optional)
+`idColumn` must also be configured — without it the plugin has no row id
+to round-trip and drag stays disabled.
 
-Wire these to enable double-click-to-create.
+Sigma-side, parse the payload with `JsonExtract` and feed the extracted
+fields into your update action. Example formulas:
 
-| Slot | Type | Purpose |
-|---|---|---|
-| `addGroupVariable` | variable (text) | The lane the new item was dropped in. |
-| `addStartVariable` | variable (date) | Monday-aligned start of the new item. |
-| `addEndVariable` | variable (date) | Start + 1 week. |
-| `addLabelVariable` | variable (text) | Empty label; your Action can default it. |
-| `addAction` | action-trigger | Fires to insert the row. |
+```
+JsonExtract([editPayload], "id")
+DateParse(JsonExtract([editPayload], "start"))
+DateParse(JsonExtract([editPayload], "end"))
+```
+
+Drag-between-lanes (group reassignment) and double-click-to-create are
+not wired in this build.
 
 ### Visual styling (optional)
 

@@ -207,6 +207,35 @@ describe('buildItemsAndGroups', () => {
       type: 'range',
     })
     expect(result.groups).toEqual([{ id: 'Alice', content: 'Alice' }])
+    expect(result.rowIdByItemId.get('r1|Alice')).toBe('r1')
+  })
+
+  test('rowIdByItemId maps every fanned-out item back to the source row', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      group_col: [['Alice', 'Bob']],
+      label_col: ['Task'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    expect(result.items).toHaveLength(2)
+    for (const item of result.items) {
+      expect(result.rowIdByItemId.get(String(item.id))).toBe('r1')
+    }
+  })
+
+  test('rowIdByItemId is empty when no idColumn is configured', () => {
+    const cfg = { ...baseConfig, idColumn: undefined }
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      group_col: ['Alice'],
+      label_col: ['T'],
+    }
+    const result = buildItemsAndGroups(cfg, data, new Map())
+    expect(result.items).toHaveLength(1)
+    expect(result.rowIdByItemId.size).toBe(0)
   })
 
   test('one row with multi-value group → one item per group', () => {

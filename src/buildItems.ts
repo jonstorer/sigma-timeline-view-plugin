@@ -4,6 +4,7 @@ import type {
   GroupPath,
   ItemVisual,
   ParsedGroupCell,
+  TimelineConfig,
 } from './types'
 
 export function parseGroupCell(raw: unknown): ParsedGroupCell {
@@ -17,16 +18,17 @@ export function parseGroupCell(raw: unknown): ParsedGroupCell {
   const s = String(raw).trim()
   if (s === '') return { values: [], wasMulti: false }
   if (s.startsWith('[')) {
+    let parsed: unknown
     try {
-      const parsed = JSON.parse(s)
-      if (Array.isArray(parsed)) {
-        return {
-          values: parsed.map(String).filter((v) => v !== ''),
-          wasMulti: true,
-        }
-      }
+      parsed = JSON.parse(s)
     } catch {
-      // fall through
+      parsed = null
+    }
+    if (Array.isArray(parsed)) {
+      return {
+        values: parsed.map(String).filter((v) => v !== ''),
+        wasMulti: true,
+      }
     }
   }
   if (s.includes(',')) {
@@ -42,12 +44,9 @@ export function parseGroupCell(raw: unknown): ParsedGroupCell {
 }
 
 export function safeId(value: unknown): string {
-  // vis-timeline DataSet keys items by id. Encode to a stable string.
   return String(value).replace(/\|/g, '\\|')
 }
 
-// Encode the first `level + 1` segments of a path as a single string id.
-// Used so a parent group and its leaf descendants get distinct, stable ids.
 export function pathToGroupId(path: GroupPath, level: number): string {
   return path
     .slice(0, level + 1)
@@ -55,18 +54,6 @@ export function pathToGroupId(path: GroupPath, level: number): string {
     .join('|')
 }
 
-// Given the parsed group cells for a single row (one per hierarchy level),
-// produce the list of leaf paths the row contributes to.
-//
-// Semantics (cartesian product):
-//   - Each level contributes its values independently.
-//   - The row appears once in every combination of (level-0 value, level-1
-//     value, …, level-k value) — i.e. the cartesian product across levels.
-//   - Single-valued cells contribute one value (so they don't fan out).
-//   - If any level's cell is empty, the row contributes no paths.
-//
-// Example: row with team=['A','B'] and assignee=['alice','bob'] produces
-//   four paths: ['A','alice'], ['A','bob'], ['B','alice'], ['B','bob'].
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -85,8 +72,7 @@ export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
 }
 
 export function buildColorByStatus(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  config: TimelineConfig | null | undefined,
   legendData: Record<string, unknown[]> | undefined,
 ): Map<string, string> {
   const map = new Map<string, string>()
@@ -106,8 +92,6 @@ export function buildColorByStatus(
   return map
 }
 
-// Accept either a single column name (legacy / single-level) or an array
-// of column names ordered top-down through the hierarchy.
 function normalizeGroupCols(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map(String).filter((s) => s !== '')
   if (raw == null || raw === '') return []
@@ -121,16 +105,16 @@ interface GroupNode {
 }
 
 export function buildItemsAndGroups(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  config: TimelineConfig | null | undefined,
   data: Record<string, unknown[]> | undefined,
   colorByStatus: Map<string, string>,
 ): BuildResult {
   const visuals = new Map<string, ItemVisual>()
+  const rowIdByItemId = new Map<string, unknown>()
   const errors: string[] = []
 
   if (!config || !data) {
-    return { items: [], groups: [], visuals, errors }
+    return { items: [], groups: [], visuals, rowIdByItemId, errors }
   }
 
   const startCol = config.start
@@ -142,7 +126,7 @@ export function buildItemsAndGroups(
 
   const groupCols = normalizeGroupCols(config.group)
   if (!startCol || !endCol) {
-    return { items: [], groups: [], visuals, errors }
+    return { items: [], groups: [], visuals, rowIdByItemId, errors }
   }
   const ungrouped = groupCols.length === 0
 
@@ -195,6 +179,7 @@ export function buildItemsAndGroups(
           ...(color ? { chipColor: color } : {}),
         })
       }
+      if (idCol) rowIdByItemId.set(itemId, rowId)
       items.push({
         id: itemId,
         ...(group ? { group } : {}),
@@ -207,8 +192,6 @@ export function buildItemsAndGroups(
     }
 
     if (ungrouped) {
-      // No group columns configured → one item per row, no `group` field.
-      // vis-timeline renders ungrouped items in a single flat lane.
       pushItem(safeId(rowId))
       continue
     }
@@ -224,13 +207,6 @@ export function buildItemsAndGroups(
     }
   }
 
-  // Emit DataGroups. Parents carry their nestedGroups list (sorted by child
-  // content so siblings appear in alpha order). vis-timeline auto-computes
-  // indentation from the parent/child structure, so we don't emit treeLevel.
-  //
-  // vis-timeline applies `.vis-nesting-group` only to the LABEL side of a
-  // parent group, not to the body — but `data.className` is propagated to
-  // both, so we use a custom `ts-parent-group` class to style both halves.
   const groups: DataGroup[] = []
   for (const [id, node] of groupTree) {
     const group: DataGroup = { id, content: node.content }
@@ -246,9 +222,6 @@ export function buildItemsAndGroups(
     groups.push(group)
   }
 
-  // Stable order for tests and debugging: parents before children, then alpha.
-  // vis-timeline renders using `groupOrder` + per-parent `nestedGroups`, so
-  // DataSet order itself doesn't drive layout.
   groups.sort((a, b) => {
     const la = groupTree.get(a.id as string)?.treeLevel ?? 0
     const lb = groupTree.get(b.id as string)?.treeLevel ?? 0
@@ -256,5 +229,5 @@ export function buildItemsAndGroups(
     return String(a.content).localeCompare(String(b.content))
   })
 
-  return { items, groups, visuals, errors }
+  return { items, groups, visuals, rowIdByItemId, errors }
 }
