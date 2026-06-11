@@ -13,6 +13,9 @@ dist-ssr
 .vite
 *.local
 
+# Claude Code — share project settings, keep personal overrides local
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
