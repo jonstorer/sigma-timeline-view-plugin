@@ -59,4 +59,13 @@ describe('editorPanelConfig', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
     expect(byName.statusColumn).toMatchObject({ source: SOURCE })
   })
+
+  test('edit slots are present: text variable + action trigger', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.editPayloadVariable).toMatchObject({
+      type: 'variable',
+      allowedTypes: ['text'],
+    })
+    expect(byName.editAction).toMatchObject({ type: 'action-trigger' })
+  })
 })

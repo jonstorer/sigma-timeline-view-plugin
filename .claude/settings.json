@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Sigma_Docs__search",
+      "mcp__claude_ai_Glean__search",
+      "mcp__claude_ai_Glean__chat",
+      "Bash(npx vitest *)",
+      "Bash(npx eslint *)"
+    ]
+  }
+}

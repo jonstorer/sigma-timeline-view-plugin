@@ -11,28 +11,43 @@ import moment from 'moment'
 import { buildColorByStatus, buildItemsAndGroups } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
-import type { ItemVisual } from './types'
+import type { ItemVisual, TimelineConfig } from './types'
 
-export interface LiveTimelineProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any
-  data: Record<string, unknown[]> | undefined
-  legendData: Record<string, unknown[]> | undefined
+const DAY_MS = 1000 * 60 * 60 * 24
+
+export interface ItemEditPayload {
+  id: unknown
+  start: string
+  end: string | null
 }
 
-export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
+export interface LiveTimelineProps {
+  config: TimelineConfig | null | undefined
+  data: Record<string, unknown[]> | undefined
+  legendData: Record<string, unknown[]> | undefined
+  onItemEdit?: (payload: ItemEditPayload) => void
+}
+
+export function LiveTimeline({
+  config,
+  data,
+  legendData,
+  onItemEdit,
+}: LiveTimelineProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const timelineRef = useRef<Timeline | null>(null)
   const itemsDsRef = useRef<DataSet<DataItem> | null>(null)
   const groupsDsRef = useRef<DataSet<DataGroup> | null>(null)
   const visualsRef = useRef<Map<string, ItemVisual>>(new Map())
+  const rowIdByItemIdRef = useRef<Map<string, unknown>>(new Map())
+  const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
 
   const colorByStatus = useMemo(
     () => buildColorByStatus(config, legendData),
     [config, legendData],
   )
 
-  const { items, groups, visuals } = useMemo(
+  const { items, groups, visuals, rowIdByItemId } = useMemo(
     () => buildItemsAndGroups(config, data, colorByStatus),
     [config, data, colorByStatus],
   )
@@ -41,8 +56,14 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
     visualsRef.current = visuals
   }, [visuals])
 
-  // One-time Timeline construction (read-only baseline — drag/add/lazy-load
-  // wiring deliberately omitted; will be added back as separate capabilities).
+  useEffect(() => {
+    rowIdByItemIdRef.current = rowIdByItemId
+  }, [rowIdByItemId])
+
+  useEffect(() => {
+    onItemEditRef.current = onItemEdit
+  }, [onItemEdit])
+
   useEffect(() => {
     if (!containerRef.current) return
     const itemsDs = new DataSet<DataItem>()
@@ -55,9 +76,8 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
       orientation: 'top',
       start: moment().subtract(1, 'month').toDate(),
       end: moment().add(2, 'months').toDate(),
-      zoomMin: 1000 * 60 * 60 * 24 * 28, // 4 weeks
-      zoomMax: 1000 * 60 * 60 * 24 * 365 * 2, // 2 years
-      // Mouse wheel pans the timeline horizontally; zoom is via the toolbar.
+      zoomMin: 28 * DAY_MS,
+      zoomMax: 730 * DAY_MS,
       zoomable: false,
       horizontalScroll: true,
       timeAxis: { scale: 'week', step: 1 },
@@ -65,14 +85,31 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
         minorLabels: { week: 'MMM D' },
         majorLabels: { week: 'MMMM YYYY' },
       },
-      // `margin.item.vertical` doubles as "gap between stacked items" AND
-      // "buffer below the bottom-most stacked item" — bumping it gives lanes
-      // breathing room so items don't crowd the bottom edge.
       margin: {
         item: { vertical: 14, horizontal: 10 },
         axis: 24,
       },
       verticalScroll: true,
+      editable: {
+        updateTime: Boolean(onItemEditRef.current),
+        updateGroup: false,
+        add: false,
+        remove: false,
+      },
+      onMove: (item, callback) => {
+        const handler = onItemEditRef.current
+        const rowId = rowIdByItemIdRef.current.get(String(item.id))
+        if (!handler || rowId == null) {
+          callback(null)
+          return
+        }
+        handler({
+          id: rowId,
+          start: new Date(item.start as Date).toISOString(),
+          end: item.end ? new Date(item.end as Date).toISOString() : null,
+        })
+        callback(item)
+      },
       moment: (date: moment.MomentInput) => moment(date),
       groupOrder: (a: DataGroup, b: DataGroup) =>
         String(a.content ?? a.id).localeCompare(String(b.content ?? b.id)),
@@ -91,10 +128,21 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
     }
   }, [])
 
-  // Push items + groups updates whenever the data builds change.
-  // vis-timeline needs an explicit setGroups(null) to switch to ungrouped
-  // mode — passing an empty DataSet alone causes items without a `group`
-  // field to be dropped from the render.
+  useEffect(() => {
+    const tl = timelineRef.current
+    if (!tl) return
+    tl.setOptions({
+      editable: {
+        updateTime: Boolean(onItemEdit),
+        updateGroup: false,
+        add: false,
+        remove: false,
+      },
+    })
+    const itemsDs = itemsDsRef.current
+    if (itemsDs) itemsDs.update(itemsDs.get())
+  }, [onItemEdit])
+
   useEffect(() => {
     const itemsDs = itemsDsRef.current
     const groupsDs = groupsDsRef.current
@@ -114,9 +162,6 @@ export function LiveTimeline({ config, data, legendData }: LiveTimelineProps) {
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.start || !config?.end
 
-  // With multi-level grouping, `groups` includes parent rows. The user-facing
-  // "lane" count should reflect only leaf swimlanes (no nested children).
-  // When no group columns are configured, items render flat with no lanes.
   const laneCount = groups.filter(
     (g) => !g.nestedGroups || g.nestedGroups.length === 0,
   ).length
