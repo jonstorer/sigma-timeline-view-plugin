@@ -28,7 +28,10 @@ and exposes its config slots in Sigma's editor panel.
   index, not cartesian-producted — see [Multi-level grouping](#multi-level-grouping).
 - Drag an item horizontally to change its start/end; the new times round-
   trip to the source row via the Sigma Action API as a single JSON payload.
-  Lane reassignment and double-click-create are not yet wired.
+  Lane reassignment and double-click-to-create are not yet wired.
+- Select an item to fire a Sigma Action with the row's pass-through columns as a
+  JSON payload — e.g. to populate a detail form for the record with no
+  per-column lookups, since the values ride along in the payload.
 - Optional status color bar on the left edge of each item, plus an optional
   small colored chip and/or text pill inside the item.
 - Visible-window range (start + end) is pushed to workbook variables on every
@@ -41,8 +44,8 @@ and exposes its config slots in Sigma's editor panel.
 | Slot | Type | Purpose |
 |---|---|---|
 | `source` | element | The data source (worksheet / table). |
-| `start` | column (datetime) | Item start. |
-| `end` | column (datetime) | Item end. |
+| `startDate` | column (datetime) | Item start. |
+| `endDate` | column (datetime) | Item end. |
 | `label` | column (text/number) | Text shown on the item bar. |
 | `group` | column (multi) | Swimlane assignment. Leave empty to render items flat (no lanes), pick one column for a flat list of lanes, or several in order (top → bottom) for nested groups. Each column may hold single or multi-value cells. |
 | `idColumn` | column | Row id. Required if you want to persist edits. |
@@ -54,7 +57,7 @@ plugin writes a JSON payload to the text variable and fires the action.
 
 | Slot | Type | Purpose |
 |---|---|---|
-| `editPayloadVariable` | variable (text) | Receives `{"id": <rowId>, "start": "<ISO>", "end": "<ISO>"}`. |
+| `editPayloadVariable` | variable (text) | Receives `{"id": <rowId>, "startDate": "<ISO>", "endDate": "<ISO>"}`. |
 | `editAction` | action-trigger | Fires after the variable is set. |
 
 `idColumn` must also be configured — without it the plugin has no row id
@@ -65,12 +68,36 @@ fields into your update action. Example formulas:
 
 ```
 JsonExtract([editPayload], "id")
-DateParse(JsonExtract([editPayload], "start"))
-DateParse(JsonExtract([editPayload], "end"))
+DateParse(JsonExtract([editPayload], "startDate"))
+DateParse(JsonExtract([editPayload], "endDate"))
 ```
 
-Drag-between-lanes (group reassignment) and double-click-to-create are
-not wired in this build.
+Drag-between-lanes (group reassignment) and double-click-to-create (new
+items) are not wired in this build.
+
+### Select an item (optional)
+
+Wire these slots to fire a Sigma Action when an item is selected. On select the
+plugin serializes the configured **pass-through columns** for that row into a
+JSON string, writes it to the text variable, then fires the action. Sigma-side,
+pull out the fields you need with `JsonExtract` — no per-column lookups, since
+the values ride along in the payload.
+
+| Slot | Type | Purpose |
+|---|---|---|
+| `passthroughColumns` | column (multi) | Columns serialized into the JSON payload, keyed by column name. Add every column your detail form needs — the timeline's own mapped columns are **not** included automatically; select all columns here if you want the whole row. |
+| `passthroughVariable` | variable (text) | Receives the row's JSON payload. |
+| `selectAction` | action-trigger | Fires after the JSON is set. |
+
+The JSON is keyed by **column name**, so a control's value is just
+`JsonExtract([<passthroughVariable>], "<Column Name>")`. Re-selecting the same
+row produces identical JSON, so the action does not re-fire (matching drag-edits,
+which no-op when nothing changed). A reset button can re-run the same populate
+sequence to restore the form from the still-current payload.
+
+Only columns bound to the element reach the plugin, which is why extras must be
+added to `passthroughColumns` — binding a column there is what makes its data
+available to serialize.
 
 ### Visual styling (optional)
 
@@ -122,7 +149,7 @@ your Sigma-side filter then refetches only the matching rows.
 Recommended filter on the data source:
 
 ```
-start <= @visibleEnd AND end >= @visibleStart
+startDate <= @visibleEnd AND endDate >= @visibleStart
 ```
 
 (overlap test, so items that straddle the window are still included.)

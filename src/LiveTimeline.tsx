@@ -4,11 +4,16 @@ import {
   Timeline,
   type DataGroup,
   type DataItem,
+  type TimelineEventPropertiesResult,
   type TimelineItem,
   type TimelineOptions,
 } from 'vis-timeline/esnext'
 import moment from 'moment'
-import { buildColorByStatus, buildItemsAndGroups } from './buildItems'
+import {
+  buildColorByStatus,
+  buildItemsAndGroups,
+  buildPassthroughJson,
+} from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import type { ItemVisual, TimelineConfig } from './types'
@@ -17,22 +22,26 @@ const DAY_MS = 1000 * 60 * 60 * 24
 
 export interface ItemEditPayload {
   id: unknown
-  start: string
-  end: string | null
+  startDate: string
+  endDate: string | null
 }
 
 export interface LiveTimelineProps {
   config: TimelineConfig | null | undefined
   data: Record<string, unknown[]> | undefined
+  columns?: Record<string, { name?: string }> | undefined
   legendData: Record<string, unknown[]> | undefined
   onItemEdit?: (payload: ItemEditPayload) => void
+  onItemSelect?: (rowJson: string) => void
 }
 
 export function LiveTimeline({
   config,
   data,
+  columns,
   legendData,
   onItemEdit,
+  onItemSelect,
 }: LiveTimelineProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const timelineRef = useRef<Timeline | null>(null)
@@ -40,14 +49,21 @@ export function LiveTimeline({
   const groupsDsRef = useRef<DataSet<DataGroup> | null>(null)
   const visualsRef = useRef<Map<string, ItemVisual>>(new Map())
   const rowIdByItemIdRef = useRef<Map<string, unknown>>(new Map())
+  const rowIndexByItemIdRef = useRef<Map<string, number>>(new Map())
+  const dataRef = useRef<typeof data>(data)
+  const columnsRef = useRef<typeof columns>(columns)
+  const passthroughColsRef = useRef<TimelineConfig['passthroughColumns']>(
+    config?.passthroughColumns,
+  )
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
+  const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
 
   const colorByStatus = useMemo(
     () => buildColorByStatus(config, legendData),
     [config, legendData],
   )
 
-  const { items, groups, visuals, rowIdByItemId } = useMemo(
+  const { items, groups, visuals, rowIdByItemId, rowIndexByItemId } = useMemo(
     () => buildItemsAndGroups(config, data, colorByStatus),
     [config, data, colorByStatus],
   )
@@ -61,8 +77,28 @@ export function LiveTimeline({
   }, [rowIdByItemId])
 
   useEffect(() => {
+    rowIndexByItemIdRef.current = rowIndexByItemId
+  }, [rowIndexByItemId])
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  useEffect(() => {
+    columnsRef.current = columns
+  }, [columns])
+
+  useEffect(() => {
+    passthroughColsRef.current = config?.passthroughColumns
+  }, [config])
+
+  useEffect(() => {
     onItemEditRef.current = onItemEdit
   }, [onItemEdit])
+
+  useEffect(() => {
+    onItemSelectRef.current = onItemSelect
+  }, [onItemSelect])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -105,8 +141,8 @@ export function LiveTimeline({
         }
         handler({
           id: rowId,
-          start: new Date(item.start as Date).toISOString(),
-          end: item.end ? new Date(item.end as Date).toISOString() : null,
+          startDate: new Date(item.start as Date).toISOString(),
+          endDate: item.end ? new Date(item.end as Date).toISOString() : null,
         })
         callback(item)
       },
@@ -119,6 +155,24 @@ export function LiveTimeline({
 
     const tl = new Timeline(containerRef.current, itemsDs, groupsDs, options)
     timelineRef.current = tl
+
+    tl.on('select', (props: TimelineEventPropertiesResult) => {
+      const handler = onItemSelectRef.current
+      // The `select` event carries an `items` array (current selection), which
+      // the shared TimelineEventPropertiesResult type doesn't declare.
+      const itemId = (props as { items?: Array<number | string> }).items?.[0]
+      if (!handler || itemId == null) return
+      const rowIndex = rowIndexByItemIdRef.current.get(String(itemId))
+      if (rowIndex == null) return
+      handler(
+        buildPassthroughJson(
+          dataRef.current,
+          columnsRef.current,
+          passthroughColsRef.current,
+          rowIndex,
+        ),
+      )
+    })
 
     return () => {
       tl.destroy()
@@ -160,7 +214,7 @@ export function LiveTimeline({
   }, [items, groups])
 
   const hasSource = Boolean(config?.[SOURCE])
-  const missingCols = !config?.start || !config?.end
+  const missingCols = !config?.startDate || !config?.endDate
 
   const laneCount = groups.filter(
     (g) => !g.nestedGroups || g.nestedGroups.length === 0,

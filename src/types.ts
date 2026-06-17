@@ -13,11 +13,14 @@ export interface TimelineConfig {
   idColumn?: string
   label?: string
   group?: string | string[]
-  start?: string
-  end?: string
+  startDate?: string
+  endDate?: string
   pillLabelColumn?: string
   editPayloadVariable?: string
   editAction?: string
+  passthroughColumns?: string | string[]
+  passthroughVariable?: string
+  selectAction?: string
   statusColumn?: string
   statusLegendName?: string
   statusLegendColor?: string
@@ -37,6 +40,7 @@ export interface BuildResult {
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>
+  rowIndexByItemId: Map<string, number>
   errors: string[]
 }
 

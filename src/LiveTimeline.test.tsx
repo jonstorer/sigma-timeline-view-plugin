@@ -15,6 +15,7 @@ vi.mock('vis-timeline/esnext', async () => {
       destroy: vi.fn(),
       setGroups: vi.fn(),
       setOptions: vi.fn(),
+      on: vi.fn(),
     })),
   }
 })
@@ -42,12 +43,20 @@ const lastTimelineInstance = () =>
   vi.mocked(Timeline).mock.results.at(-1)!.value as {
     setOptions: ReturnType<typeof vi.fn>
     setGroups: ReturnType<typeof vi.fn>
+    on: ReturnType<typeof vi.fn>
   }
+
+// Pull the callback LiveTimeline registered for a given Timeline event.
+const lastEventHandler = (event: string) => {
+  const call = lastTimelineInstance()
+    .on.mock.calls.find((c) => c[0] === event)
+  return call?.[1] as ((props: { items?: unknown[] }) => void) | undefined
+}
 
 const oneRowConfig = {
   [SOURCE]: 'element-1',
-  start: 'start_col',
-  end: 'end_col',
+  startDate: 'start_col',
+  endDate: 'end_col',
   label: 'label_col',
   idColumn: 'id_col',
 }
@@ -80,8 +89,8 @@ describe('LiveTimeline', () => {
   test('reports just an item count when no group columns configured', () => {
     const config = {
       [SOURCE]: 'element-1',
-      start: 'start_col',
-      end: 'end_col',
+      startDate: 'start_col',
+      endDate: 'end_col',
       label: 'label_col',
       idColumn: 'id_col',
     }
@@ -100,8 +109,8 @@ describe('LiveTimeline', () => {
   test('reports item and lane counts when fully configured', () => {
     const config = {
       [SOURCE]: 'element-1',
-      start: 'start_col',
-      end: 'end_col',
+      startDate: 'start_col',
+      endDate: 'end_col',
       group: 'group_col',
       label: 'label_col',
       idColumn: 'id_col',
@@ -122,8 +131,8 @@ describe('LiveTimeline', () => {
   test('uses singular wording for one item / one lane', () => {
     const config = {
       [SOURCE]: 'element-1',
-      start: 'start_col',
-      end: 'end_col',
+      startDate: 'start_col',
+      endDate: 'end_col',
       group: 'group_col',
       label: 'label_col',
       idColumn: 'id_col',
@@ -219,8 +228,8 @@ describe('LiveTimeline drag editing', () => {
 
     expect(onItemEdit).toHaveBeenCalledWith({
       id: 'r1',
-      start: '2026-05-02T00:00:00.000Z',
-      end: '2026-05-09T00:00:00.000Z',
+      startDate: '2026-05-02T00:00:00.000Z',
+      endDate: '2026-05-09T00:00:00.000Z',
     })
     expect(callback).toHaveBeenCalledWith(moved)
   })
@@ -266,5 +275,65 @@ describe('LiveTimeline drag editing', () => {
       expect.any(DataSet),
     )
     expect(lastTimelineInstance().setGroups).not.toHaveBeenCalledWith(undefined)
+  })
+})
+
+describe('LiveTimeline select', () => {
+  const selectConfig = {
+    ...oneRowConfig,
+    passthroughColumns: ['id_col', 'label_col'],
+  }
+  const selectColumns = {
+    id_col: { name: 'Id' },
+    label_col: { name: 'Label' },
+  }
+
+  test('emits the selected row as JSON of the pass-through columns, keyed by name', () => {
+    const onItemSelect = vi.fn()
+    render(
+      <LiveTimeline
+        config={selectConfig}
+        data={oneRowData}
+        columns={selectColumns}
+        legendData={undefined}
+        onItemSelect={onItemSelect}
+      />,
+    )
+
+    lastEventHandler('select')!({ items: ['r1'] })
+
+    expect(onItemSelect).toHaveBeenCalledWith(
+      JSON.stringify({ Id: 'r1', Label: 'T' }),
+    )
+  })
+
+  test('ignores deselection / empty-space clicks (no items)', () => {
+    const onItemSelect = vi.fn()
+    render(
+      <LiveTimeline
+        config={selectConfig}
+        data={oneRowData}
+        columns={selectColumns}
+        legendData={undefined}
+        onItemSelect={onItemSelect}
+      />,
+    )
+
+    lastEventHandler('select')!({ items: [] })
+
+    expect(onItemSelect).not.toHaveBeenCalled()
+  })
+
+  test('does nothing when no select handler is wired', () => {
+    render(
+      <LiveTimeline
+        config={selectConfig}
+        data={oneRowData}
+        columns={selectColumns}
+        legendData={undefined}
+      />,
+    )
+
+    expect(() => lastEventHandler('select')!({ items: ['r1'] })).not.toThrow()
   })
 })

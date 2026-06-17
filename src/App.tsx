@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback } from 'react'
 import {
-  useActionTrigger,
   useConfig,
   useEditorPanelConfig,
+  useElementColumns,
   useElementData,
-  useVariable,
 } from '@sigmacomputing/plugin'
 import { editorPanelConfig, SOURCE, STATUS_LEGEND } from './editorPanel'
 import { LiveTimeline, type ItemEditPayload } from './LiveTimeline'
+import { useTriggerWithValue } from './useTriggerWithValue'
 import type { TimelineConfig } from './types'
 import './App.css'
 
@@ -20,75 +20,51 @@ function App() {
   // treat undefined/'' as "unconfigured" (no-op). Default to '' so a partial
   // config stays type-clean without changing behavior.
   const data = useElementData(config?.[SOURCE] ?? '')
+  const columns = useElementColumns(config?.[SOURCE] ?? '')
   const legendData = useElementData(config?.[STATUS_LEGEND] ?? '')
 
-  const payloadVariableId = config?.editPayloadVariable ?? ''
-  const [editPayloadVar, setEditPayload] = useVariable(payloadVariableId)
-  const triggerEditAction = useActionTrigger(config?.editAction ?? '')
+  // Drag-edit: write the {id,startDate,endDate} payload, then fire the edit action.
+  const fireEdit = useTriggerWithValue(
+    config?.editPayloadVariable ?? '',
+    config?.editAction ?? '',
+  )
+  // Select: write the selected row as a JSON payload of the pass-through
+  // columns, then fire the action. Re-selecting the same row produces the same
+  // JSON, so the default no-refire-on-same-value applies.
+  const fireSelect = useTriggerWithValue(
+    config?.passthroughVariable ?? '',
+    config?.selectAction ?? '',
+  )
 
   const editEnabled = Boolean(
     config?.idColumn && config?.editPayloadVariable && config?.editAction,
   )
-
-  const currentValueRef = useRef<unknown>(undefined)
-  useEffect(() => {
-    currentValueRef.current = editPayloadVar?.defaultValue?.value
-  }, [editPayloadVar])
-
-  const pendingPayloadRef = useRef<string | null>(null)
-  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const fireAction = useCallback(() => {
-    if (fallbackTimerRef.current) {
-      clearTimeout(fallbackTimerRef.current)
-      fallbackTimerRef.current = null
-    }
-    pendingPayloadRef.current = null
-    triggerEditAction()
-  }, [triggerEditAction])
+  const selectEnabled = Boolean(
+    config?.passthroughVariable && config?.selectAction,
+  )
 
   const onItemEdit = useCallback(
     (payload: ItemEditPayload) => {
-      const json = JSON.stringify(payload)
-
-      const current = currentValueRef.current
-      if (current != null && String(current) === json) return
-
-      pendingPayloadRef.current = json
-
-      setEditPayload(json)
-
-      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
-      fallbackTimerRef.current = setTimeout(() => {
-        if (pendingPayloadRef.current === json) {
-          fireAction()
-        }
-      }, 3000)
+      fireEdit(JSON.stringify(payload))
     },
-    [setEditPayload, fireAction],
+    [fireEdit],
   )
 
-  useEffect(() => {
-    const pending = pendingPayloadRef.current
-    if (pending == null) return
-    const current = editPayloadVar?.defaultValue?.value
-    if (current != null && String(current) === pending) {
-      fireAction()
-    }
-  }, [editPayloadVar, fireAction])
-
-  useEffect(() => {
-    return () => {
-      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
-    }
-  }, [])
+  const onItemSelect = useCallback(
+    (rowJson: string) => {
+      fireSelect(rowJson)
+    },
+    [fireSelect],
+  )
 
   return (
     <LiveTimeline
       config={config}
       data={data}
+      columns={columns}
       legendData={legendData}
       onItemEdit={editEnabled ? onItemEdit : undefined}
+      onItemSelect={selectEnabled ? onItemSelect : undefined}
     />
   )
 }
