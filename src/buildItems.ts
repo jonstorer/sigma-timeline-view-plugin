@@ -111,14 +111,15 @@ export function buildItemsAndGroups(
 ): BuildResult {
   const visuals = new Map<string, ItemVisual>()
   const rowIdByItemId = new Map<string, unknown>()
+  const rowIndexByItemId = new Map<string, number>()
   const errors: string[] = []
 
   if (!config || !data) {
-    return { items: [], groups: [], visuals, rowIdByItemId, errors }
+    return { items: [], groups: [], visuals, rowIdByItemId, rowIndexByItemId, errors }
   }
 
-  const startCol = config.start
-  const endCol = config.end
+  const startCol = config.startDate
+  const endCol = config.endDate
   const labelCol = config.label
   const idCol = config.idColumn
   const statusCol = config.statusColumn
@@ -126,7 +127,7 @@ export function buildItemsAndGroups(
 
   const groupCols = normalizeGroupCols(config.group)
   if (!startCol || !endCol) {
-    return { items: [], groups: [], visuals, rowIdByItemId, errors }
+    return { items: [], groups: [], visuals, rowIdByItemId, rowIndexByItemId, errors }
   }
   const ungrouped = groupCols.length === 0
 
@@ -180,6 +181,7 @@ export function buildItemsAndGroups(
         })
       }
       if (idCol) rowIdByItemId.set(itemId, rowId)
+      rowIndexByItemId.set(itemId, i)
       items.push({
         id: itemId,
         ...(group ? { group } : {}),
@@ -229,5 +231,48 @@ export function buildItemsAndGroups(
     return String(a.content).localeCompare(String(b.content))
   })
 
-  return { items, groups, visuals, rowIdByItemId, errors }
+  return { items, groups, visuals, rowIdByItemId, rowIndexByItemId, errors }
+}
+
+/**
+ * Sigma hands variant / multi-value columns to plugins already serialized as a
+ * JSON string (often pretty-printed). Re-stringifying that as part of the row
+ * would double-encode it — escaped quotes and `\n` inside a string — forcing
+ * consumers to parse twice. So when a cell value is itself a JSON array/object
+ * string, parse it once here and nest the real structure instead. Only strings
+ * that start with `[` or `{` are parsed, so plain text, numbers, hex ids, and
+ * null pass through untouched (no accidental coercion of numeric-looking text).
+ */
+function unwrapNestedJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  if (trimmed[0] !== '[' && trimmed[0] !== '{') return value
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * Serialize a source row to a JSON string carrying only the configured
+ * pass-through columns, keyed by column name (falling back to column id when
+ * no name is available). Built lazily for the selected row — never for every
+ * row — so it stays O(columns) per click. Missing values serialize as null;
+ * cells that are themselves JSON arrays/objects nest as real structure (see
+ * unwrapNestedJson) rather than double-encoded strings.
+ */
+export function buildPassthroughJson(
+  data: Record<string, unknown[]> | undefined,
+  columns: Record<string, { name?: string }> | undefined,
+  passthroughCols: string | string[] | undefined,
+  rowIndex: number,
+): string {
+  const cols = normalizeGroupCols(passthroughCols)
+  const row: Record<string, unknown> = {}
+  for (const colId of cols) {
+    const key = columns?.[colId]?.name ?? colId
+    row[key] = unwrapNestedJson(data?.[colId]?.[rowIndex] ?? null)
+  }
+  return JSON.stringify(row)
 }

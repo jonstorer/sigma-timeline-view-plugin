@@ -32,7 +32,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
-    name: 'start',
+    name: 'startDate',
     type: 'column',
     label: 'Start date',
     source: SOURCE,
@@ -41,7 +41,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
-    name: 'end',
+    name: 'endDate',
     type: 'column',
     label: 'End date',
     source: SOURCE,
@@ -58,9 +58,32 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'statusColumn',
+    type: 'column',
+    label: 'Status column (enum value per row)',
+    source: SOURCE,
+    allowMultiple: false,
+  },
+
+  {
     name: 'editPayloadVariable',
     type: 'variable',
-    label: 'Edit payload variable (text, holds JSON: {id,start,end})',
+    label: 'Edit payload variable (text, holds JSON: {id,startDate,endDate})',
+    allowedTypes: ['text'],
+  },
+
+  {
+    name: 'passthroughColumns',
+    type: 'column',
+    label: 'Pass-through columns (emitted as JSON on select)',
+    source: SOURCE,
+    allowMultiple: true,
+  },
+
+  {
+    name: 'passthroughVariable',
+    type: 'variable',
+    label: 'On select: pass-through JSON variable (text)',
     allowedTypes: ['text'],
   },
 
@@ -70,15 +93,13 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     label: 'Edit action',
   },
 
-  { name: STATUS_LEGEND, type: 'element', label: 'Status legend table' },
-
   {
-    name: 'statusColumn',
-    type: 'column',
-    label: 'Status column (enum value per row)',
-    source: SOURCE,
-    allowMultiple: false,
+    name: 'selectAction',
+    type: 'action-trigger',
+    label: 'On select action (fires after the JSON is set)',
   },
+
+  { name: STATUS_LEGEND, type: 'element', label: 'Status legend table' },
 
   {
     name: 'statusLegendName',

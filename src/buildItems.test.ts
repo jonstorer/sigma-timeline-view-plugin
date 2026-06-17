@@ -2,11 +2,92 @@ import { describe, expect, test } from 'vitest'
 import {
   buildColorByStatus,
   buildItemsAndGroups,
+  buildPassthroughJson,
   buildPathsForRow,
   parseGroupCell,
   pathToGroupId,
   safeId,
 } from './buildItems'
+
+describe('buildPassthroughJson', () => {
+  const data = {
+    id_col: ['r1', 'r2'],
+    name_col: ['Alice', 'Bob'],
+    extra_col: ['x', 'y'],
+  }
+  const columns = { id_col: { name: 'Id' }, name_col: { name: 'Name' } }
+
+  test('serializes the configured columns for the row, keyed by column name', () => {
+    expect(buildPassthroughJson(data, columns, ['id_col', 'name_col'], 1)).toBe(
+      JSON.stringify({ Id: 'r2', Name: 'Bob' }),
+    )
+  })
+
+  test('falls back to the column id when no name is available', () => {
+    expect(buildPassthroughJson(data, columns, ['extra_col'], 0)).toBe(
+      JSON.stringify({ extra_col: 'x' }),
+    )
+  })
+
+  test('accepts a single column string', () => {
+    expect(buildPassthroughJson(data, columns, 'id_col', 0)).toBe(
+      JSON.stringify({ Id: 'r1' }),
+    )
+  })
+
+  test('serializes missing column values as null', () => {
+    expect(buildPassthroughJson(data, columns, ['id_col', 'missing'], 9)).toBe(
+      JSON.stringify({ Id: null, missing: null }),
+    )
+  })
+
+  test('yields an empty object when no pass-through columns are configured', () => {
+    expect(buildPassthroughJson(data, columns, undefined, 0)).toBe('{}')
+  })
+
+  test('nests a JSON-array string cell as a real array (no double-encoding)', () => {
+    const arrData = { teams: ['[\n  "Metadata Services",\n  "AI"\n]'] }
+    const arrCols = { teams: { name: 'Teams' } }
+    expect(buildPassthroughJson(arrData, arrCols, ['teams'], 0)).toBe(
+      JSON.stringify({ Teams: ['Metadata Services', 'AI'] }),
+    )
+  })
+
+  test('nests a JSON-object string cell as a real object', () => {
+    const objData = { meta: ['{"a":1}'] }
+    expect(buildPassthroughJson(objData, undefined, ['meta'], 0)).toBe(
+      JSON.stringify({ meta: { a: 1 } }),
+    )
+  })
+
+  test('leaves bracket-prefixed text that is not valid JSON as a string', () => {
+    const badData = { note: ['[not json'] }
+    expect(buildPassthroughJson(badData, undefined, ['note'], 0)).toBe(
+      JSON.stringify({ note: '[not json' }),
+    )
+  })
+
+  test('leaves plain text and numbers untouched', () => {
+    const mixed = { desc: ['hello, world'], n: [42] }
+    expect(buildPassthroughJson(mixed, undefined, ['desc', 'n'], 0)).toBe(
+      JSON.stringify({ desc: 'hello, world', n: 42 }),
+    )
+  })
+})
+
+describe('buildItemsAndGroups rowIndexByItemId', () => {
+  test('maps each item id to its source row index', () => {
+    const config = { startDate: 'start', endDate: 'end', idColumn: 'id' }
+    const data = {
+      start: ['2026-01-01', '2026-02-01'],
+      end: ['2026-01-05', '2026-02-05'],
+      id: ['a', 'b'],
+    }
+    const { rowIndexByItemId } = buildItemsAndGroups(config, data, new Map())
+    expect(rowIndexByItemId.get('a')).toBe(0)
+    expect(rowIndexByItemId.get('b')).toBe(1)
+  })
+})
 
 describe('parseGroupCell', () => {
   test('null and undefined return empty', () => {
@@ -167,8 +248,8 @@ describe('buildColorByStatus', () => {
 
 describe('buildItemsAndGroups', () => {
   const baseConfig = {
-    start: 'start_col',
-    end: 'end_col',
+    startDate: 'start_col',
+    endDate: 'end_col',
     group: 'group_col',
     label: 'label_col',
     idColumn: 'id_col',
@@ -348,8 +429,8 @@ describe('buildItemsAndGroups', () => {
 
   test('row ids fall back to row index when idColumn is not configured', () => {
     const config = {
-      start: 'start_col',
-      end: 'end_col',
+      startDate: 'start_col',
+      endDate: 'end_col',
       group: 'group_col',
     }
     const data = {
@@ -382,8 +463,8 @@ describe('buildItemsAndGroups', () => {
     }
     const result = buildItemsAndGroups(
       {
-        start: 'start_col',
-        end: 'end_col',
+        startDate: 'start_col',
+        endDate: 'end_col',
         label: 'label_col',
         idColumn: 'id_col',
       },
@@ -425,8 +506,8 @@ describe('buildItemsAndGroups', () => {
     }
     const result = buildItemsAndGroups(
       {
-        start: 'start_col',
-        end: 'end_col',
+        startDate: 'start_col',
+        endDate: 'end_col',
         label: 'label_col',
         idColumn: 'id_col',
         statusColumn: 'status_col',
@@ -553,8 +634,8 @@ describe('buildPathsForRow', () => {
 
 describe('buildItemsAndGroups — multi-level', () => {
   const config = {
-    start: 'start_col',
-    end: 'end_col',
+    startDate: 'start_col',
+    endDate: 'end_col',
     group: ['team_col', 'person_col'],
     label: 'label_col',
     idColumn: 'id_col',
@@ -659,8 +740,8 @@ describe('buildItemsAndGroups — multi-level', () => {
     }
     const result = buildItemsAndGroups(
       {
-        start: 'start_col',
-        end: 'end_col',
+        startDate: 'start_col',
+        endDate: 'end_col',
         group: ['region_col', 'team_col', 'person_col'],
         label: 'label_col',
         idColumn: 'id_col',

@@ -23,8 +23,8 @@ describe('editorPanelConfig', () => {
     const names = editorPanelConfig.map((e) => e.name)
     for (const required of [
       SOURCE,
-      'start',
-      'end',
+      'startDate',
+      'endDate',
       'group',
       'label',
       'idColumn',
@@ -67,5 +67,18 @@ describe('editorPanelConfig', () => {
       allowedTypes: ['text'],
     })
     expect(byName.editAction).toMatchObject({ type: 'action-trigger' })
+  })
+
+  test('pass-through slots are present: multi-column, text variable + action trigger', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.passthroughColumns).toMatchObject({
+      type: 'column',
+      allowMultiple: true,
+    })
+    expect(byName.passthroughVariable).toMatchObject({
+      type: 'variable',
+      allowedTypes: ['text'],
+    })
+    expect(byName.selectAction).toMatchObject({ type: 'action-trigger' })
   })
 })
