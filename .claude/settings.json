@@ -5,7 +5,11 @@
       "mcp__claude_ai_Glean__search",
       "mcp__claude_ai_Glean__chat",
       "Bash(npx vitest *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(npx tsc *)",
+      "WebFetch(domain:help.sigmacomputing.com)",
+      "WebFetch(domain:community.sigmacomputing.com)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }
