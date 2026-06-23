@@ -73,18 +73,9 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
-    name: 'passthroughColumns',
-    type: 'column',
-    label: 'Pass-through columns (emitted as JSON on select)',
-    source: SOURCE,
-    allowMultiple: true,
-  },
-
-  {
-    name: 'passthroughVariable',
+    name: 'recordIdVariable',
     type: 'variable',
-    label: 'On select: pass-through JSON variable (text)',
-    allowedTypes: ['text'],
+    label: 'On select: record id control (single-select)',
   },
 
   {

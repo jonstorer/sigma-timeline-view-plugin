@@ -11,7 +11,6 @@ vi.mock('@sigmacomputing/plugin', () => ({
   useEditorPanelConfig: vi.fn(),
   useConfig: vi.fn(() => ({})),
   useElementData: vi.fn(() => ({})),
-  useElementColumns: vi.fn(() => ({})),
   useVariable: vi.fn(() => [undefined, vi.fn()]),
   useActionTrigger: vi.fn(() => vi.fn()),
 }))
@@ -68,17 +67,17 @@ describe('App edit-slot wiring', () => {
     expect(vi.mocked(useActionTrigger)).not.toHaveBeenCalledWith('editAction')
   })
 
-  test('wires the pass-through variable and select action to the SDK hooks by their resolved ids', () => {
+  test('wires the record id variable and select action to the SDK hooks by their resolved ids', () => {
     vi.mocked(useVariable).mockClear()
     vi.mocked(useActionTrigger).mockClear()
     vi.mocked(useConfig).mockReturnValue({
-      passthroughVariable: 'RowJson',
+      recordIdVariable: 'RecordId',
       selectAction: 'select-action-9',
     })
 
     render(<App />)
 
-    expect(vi.mocked(useVariable)).toHaveBeenCalledWith('RowJson')
+    expect(vi.mocked(useVariable)).toHaveBeenCalledWith('RecordId')
     expect(vi.mocked(useActionTrigger)).toHaveBeenCalledWith('select-action-9')
     expect(vi.mocked(useActionTrigger)).not.toHaveBeenCalledWith('selectAction')
   })
