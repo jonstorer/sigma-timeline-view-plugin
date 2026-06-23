@@ -23,10 +23,12 @@ vi.mock('vis-timeline/esnext', async () => {
 import { DataSet } from 'vis-data'
 import { Timeline } from 'vis-timeline/esnext'
 import { LiveTimeline } from './LiveTimeline'
+import { snapToDay, formatDragTooltip } from './dragHelpers'
 import { SOURCE } from './editorPanel'
 
 type CapturedOptions = {
   editable: { updateTime: boolean }
+  itemsAlwaysDraggable: { item: boolean; range: boolean }
   onMove: (
     item: { id: unknown; start: Date; end: Date | null },
     callback: (item: unknown) => void,
@@ -66,6 +68,41 @@ const oneRowData = {
   label_col: ['T'],
   id_col: ['r1'],
 }
+
+describe('snapToDay', () => {
+  // Built and compared in local time so the assertions are timezone-independent.
+  test('snaps a morning time down to the start of that day', () => {
+    const result = snapToDay(new Date(2026, 5, 16, 3, 0))
+    expect(result.getTime()).toBe(new Date(2026, 5, 16, 0, 0, 0, 0).getTime())
+  })
+
+  test('snaps an evening time up to the next day', () => {
+    const result = snapToDay(new Date(2026, 5, 16, 20, 0))
+    expect(result.getTime()).toBe(new Date(2026, 5, 17, 0, 0, 0, 0).getTime())
+  })
+
+  test('leaves a value already at midnight unchanged', () => {
+    const midnight = new Date(2026, 5, 16, 0, 0, 0, 0)
+    expect(snapToDay(midnight).getTime()).toBe(midnight.getTime())
+  })
+})
+
+describe('formatDragTooltip', () => {
+  test('shows start → end for a range', () => {
+    expect(
+      formatDragTooltip({
+        start: new Date(2026, 5, 16),
+        end: new Date(2026, 6, 16),
+      }),
+    ).toBe('Jun 16, 2026 → Jul 16, 2026')
+  })
+
+  test('shows just the start when there is no end', () => {
+    expect(formatDragTooltip({ start: new Date(2026, 5, 16) })).toBe(
+      'Jun 16, 2026',
+    )
+  })
+})
 
 describe('LiveTimeline', () => {
   test('prompts for a data source when none configured', () => {
@@ -173,6 +210,21 @@ describe('LiveTimeline drag editing', () => {
       />,
     )
     expect(lastTimelineOptions().editable.updateTime).toBe(true)
+  })
+
+  test('makes items always draggable so the whole item moves on a body drag (not just edge resize)', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    expect(lastTimelineOptions().itemsAlwaysDraggable).toEqual({
+      item: true,
+      range: true,
+    })
   })
 
   test('enables editing and re-issues items when the edit handler is wired after mount', () => {

@@ -16,6 +16,7 @@ import {
 } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
+import { snapToDay, formatDragTooltip } from './dragHelpers'
 import type { ItemVisual, TimelineConfig } from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
@@ -122,7 +123,11 @@ export function LiveTimeline({
         majorLabels: { week: 'MMMM YYYY' },
       },
       margin: {
-        item: { vertical: 14, horizontal: 10 },
+        // vis-timeline insets each lane by `axis` at the top but only
+        // `item.vertical / 2` at the bottom, so a small vertical left items
+        // flush against the lane bottom. Bump vertical for a real bottom gap
+        // (also widens spacing between stacked items, the same knob).
+        item: { vertical: 24, horizontal: 10 },
         axis: 24,
       },
       verticalScroll: true,
@@ -132,6 +137,12 @@ export function LiveTimeline({
         add: false,
         remove: false,
       },
+      // Drag-to-move (grabbing the item body) is gated behind the same
+      // selected-state check as resize in vis-timeline. Without this, a body
+      // drag on an item that isn't cleanly selected at panstart falls through
+      // to the Range pan and scrolls the timeline instead of moving the item.
+      // Making items always draggable lets the body drag claim the gesture.
+      itemsAlwaysDraggable: { item: true, range: true },
       onMove: (item, callback) => {
         const handler = onItemEditRef.current
         const rowId = rowIdByItemIdRef.current.get(String(item.id))
@@ -147,6 +158,11 @@ export function LiveTimeline({
         callback(item)
       },
       moment: (date: moment.MomentInput) => moment(date),
+      snap: (date) => snapToDay(date),
+      tooltipOnItemUpdateTime: {
+        template: (item: { start?: unknown; end?: unknown }) =>
+          formatDragTooltip(item),
+      },
       groupOrder: (a: DataGroup, b: DataGroup) =>
         String(a.content ?? a.id).localeCompare(String(b.content ?? b.id)),
       template: (item: TimelineItem) =>
