@@ -18,8 +18,7 @@ export interface TimelineConfig {
   pillLabelColumn?: string
   editPayloadVariable?: string
   editAction?: string
-  passthroughColumns?: string | string[]
-  passthroughVariable?: string
+  recordIdVariable?: string
   selectAction?: string
   statusColumn?: string
   statusLegendName?: string
@@ -40,7 +39,6 @@ export interface BuildResult {
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>
-  rowIndexByItemId: Map<string, number>
   errors: string[]
 }
 

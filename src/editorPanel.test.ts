@@ -69,16 +69,10 @@ describe('editorPanelConfig', () => {
     expect(byName.editAction).toMatchObject({ type: 'action-trigger' })
   })
 
-  test('pass-through slots are present: multi-column, text variable + action trigger', () => {
+  test('select slots are present: record id variable + action trigger (no column picker)', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
-    expect(byName.passthroughColumns).toMatchObject({
-      type: 'column',
-      allowMultiple: true,
-    })
-    expect(byName.passthroughVariable).toMatchObject({
-      type: 'variable',
-      allowedTypes: ['text'],
-    })
+    expect(byName.passthroughColumns).toBeUndefined()
+    expect(byName.recordIdVariable).toMatchObject({ type: 'variable' })
     expect(byName.selectAction).toMatchObject({ type: 'action-trigger' })
   })
 })

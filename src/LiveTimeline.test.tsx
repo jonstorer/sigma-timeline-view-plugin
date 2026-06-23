@@ -52,7 +52,9 @@ const lastTimelineInstance = () =>
 const lastEventHandler = (event: string) => {
   const call = lastTimelineInstance()
     .on.mock.calls.find((c) => c[0] === event)
-  return call?.[1] as ((props: { items?: unknown[] }) => void) | undefined
+  return call?.[1] as
+    | ((props: { items?: unknown[]; item?: unknown }) => void)
+    | undefined
 }
 
 const oneRowConfig = {
@@ -330,48 +332,35 @@ describe('LiveTimeline drag editing', () => {
   })
 })
 
-describe('LiveTimeline select', () => {
-  const selectConfig = {
-    ...oneRowConfig,
-    passthroughColumns: ['id_col', 'label_col'],
-  }
-  const selectColumns = {
-    id_col: { name: 'Id' },
-    label_col: { name: 'Label' },
-  }
-
-  test('emits the selected row as JSON of the pass-through columns, keyed by name', () => {
+describe('LiveTimeline double-click select', () => {
+  test('emits the double-clicked row id (from the id column)', () => {
     const onItemSelect = vi.fn()
     render(
       <LiveTimeline
-        config={selectConfig}
+        config={oneRowConfig}
         data={oneRowData}
-        columns={selectColumns}
         legendData={undefined}
         onItemSelect={onItemSelect}
       />,
     )
 
-    lastEventHandler('select')!({ items: ['r1'] })
+    lastEventHandler('doubleClick')!({ item: 'r1' })
 
-    expect(onItemSelect).toHaveBeenCalledWith(
-      JSON.stringify({ Id: 'r1', Label: 'T' }),
-    )
+    expect(onItemSelect).toHaveBeenCalledWith('r1')
   })
 
-  test('ignores deselection / empty-space clicks (no items)', () => {
+  test('ignores double-clicks that miss an item (no item)', () => {
     const onItemSelect = vi.fn()
     render(
       <LiveTimeline
-        config={selectConfig}
+        config={oneRowConfig}
         data={oneRowData}
-        columns={selectColumns}
         legendData={undefined}
         onItemSelect={onItemSelect}
       />,
     )
 
-    lastEventHandler('select')!({ items: [] })
+    lastEventHandler('doubleClick')!({ item: null })
 
     expect(onItemSelect).not.toHaveBeenCalled()
   })
@@ -379,13 +368,14 @@ describe('LiveTimeline select', () => {
   test('does nothing when no select handler is wired', () => {
     render(
       <LiveTimeline
-        config={selectConfig}
+        config={oneRowConfig}
         data={oneRowData}
-        columns={selectColumns}
         legendData={undefined}
       />,
     )
 
-    expect(() => lastEventHandler('select')!({ items: ['r1'] })).not.toThrow()
+    expect(() =>
+      lastEventHandler('doubleClick')!({ item: 'r1' }),
+    ).not.toThrow()
   })
 })
