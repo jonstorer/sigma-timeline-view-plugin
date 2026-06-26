@@ -144,6 +144,49 @@ export function LiveTimeline({
     const tl = new Timeline(containerRef.current, itemsDs, groupsDs, options)
     timelineRef.current = tl
 
+    // Hover card: a single reused popup element. The plugin doesn't format the
+    // value — it shows the raw description column verbatim, so authors control
+    // the content entirely from Sigma.
+    const hoverCard = document.createElement('div')
+    hoverCard.className = 'ts-hover-card'
+    hoverCard.style.display = 'none'
+    containerRef.current.appendChild(hoverCard)
+
+    const hideHoverCard = () => {
+      hoverCard.style.display = 'none'
+    }
+
+    const showHoverCard = (props: TimelineEventPropertiesResult) => {
+      const itemId = props.item
+      const description =
+        itemId == null
+          ? undefined
+          : visualsRef.current.get(String(itemId))?.description
+      if (!description) {
+        hideHoverCard()
+        return
+      }
+      hoverCard.textContent = description
+
+      // Measure off-screen, then place near the cursor and flip toward the
+      // viewport edge so the card never overflows. Positioned fixed so it
+      // escapes the timeline host's overflow clipping.
+      const ev = props.event as MouseEvent | undefined
+      const x = ev?.clientX ?? props.pageX ?? 0
+      const y = ev?.clientY ?? props.pageY ?? 0
+      hoverCard.style.left = '0'
+      hoverCard.style.top = '0'
+      hoverCard.style.display = 'block'
+      const { offsetWidth: w, offsetHeight: h } = hoverCard
+      const left = x + 14 + w > window.innerWidth - 8 ? x - w - 14 : x + 14
+      const top = y + 14 + h > window.innerHeight - 8 ? y - h - 14 : y + 14
+      hoverCard.style.left = `${Math.max(8, left)}px`
+      hoverCard.style.top = `${Math.max(8, top)}px`
+    }
+
+    tl.on('itemover', showHoverCard)
+    tl.on('itemout', hideHoverCard)
+
     tl.on('doubleClick', (props: TimelineEventPropertiesResult) => {
       const handler = onItemSelectRef.current
       // The `doubleClick` event carries the single `item` under the cursor
@@ -157,6 +200,7 @@ export function LiveTimeline({
 
     return () => {
       tl.destroy()
+      hoverCard.remove()
       timelineRef.current = null
       itemsDsRef.current = null
       groupsDsRef.current = null

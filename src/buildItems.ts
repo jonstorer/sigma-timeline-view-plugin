@@ -123,6 +123,7 @@ export function buildItemsAndGroups(
   const idCol = config.idColumn
   const statusCol = config.statusColumn
   const pillCol = config.pillLabelColumn
+  const descCol = config.descriptionColumn
 
   const groupCols = normalizeGroupCols(config.group)
   if (!startCol || !endCol) {
@@ -137,6 +138,7 @@ export function buildItemsAndGroups(
   const ids = idCol ? (data[idCol] ?? []) : []
   const statuses = statusCol ? (data[statusCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
+  const descriptions = descCol ? (data[descCol] ?? []) : []
 
   const rowCount = starts.length
   const items: DataItem[] = []
@@ -171,12 +173,14 @@ export function buildItemsAndGroups(
     const color = status ? colorByStatus.get(status) : undefined
     const style = color ? `box-shadow: inset 5px 0 0 ${color};` : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
+    const description = descCol ? String(descriptions[i] ?? '').trim() : ''
 
     const pushItem = (itemId: string, group?: string) => {
-      if (pill || color) {
+      if (pill || color || description) {
         visuals.set(itemId, {
           ...(pill ? { pill } : {}),
           ...(color ? { chipColor: color } : {}),
+          ...(description ? { description } : {}),
         })
       }
       if (idCol) rowIdByItemId.set(itemId, rowId)

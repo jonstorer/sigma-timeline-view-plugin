@@ -16,6 +16,7 @@ export interface TimelineConfig {
   startDate?: string
   endDate?: string
   pillLabelColumn?: string
+  descriptionColumn?: string
   editPayloadVariable?: string
   editAction?: string
   recordIdVariable?: string
@@ -32,6 +33,8 @@ export type GroupPath = GroupValue[]
 export interface ItemVisual {
   pill?: string
   chipColor?: string
+  /** Raw value of the configured description column, shown on item hover. */
+  description?: string
 }
 
 export interface BuildResult {
