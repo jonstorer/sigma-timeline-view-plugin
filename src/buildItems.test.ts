@@ -22,6 +22,38 @@ describe('buildItemsAndGroups rowIdByItemId', () => {
   })
 })
 
+describe('buildItemsAndGroups description', () => {
+  test('carries the description column value verbatim into visuals', () => {
+    const config = {
+      startDate: 'start',
+      endDate: 'end',
+      idColumn: 'id',
+      descriptionColumn: 'desc',
+    }
+    const data = {
+      start: ['2026-01-01', '2026-02-01'],
+      end: ['2026-01-05', '2026-02-05'],
+      id: ['r1', 'r2'],
+      desc: ['Kickoff meeting\nwith client', ''],
+    }
+    const { visuals } = buildItemsAndGroups(config, data, new Map())
+    expect(visuals.get('r1')?.description).toBe('Kickoff meeting\nwith client')
+    // Blank cells leave no description (and no visual at all here).
+    expect(visuals.has('r2')).toBe(false)
+  })
+
+  test('no description column means no description on visuals', () => {
+    const config = { startDate: 'start', endDate: 'end', idColumn: 'id' }
+    const data = {
+      start: ['2026-01-01'],
+      end: ['2026-01-05'],
+      id: ['r1'],
+    }
+    const { visuals } = buildItemsAndGroups(config, data, new Map())
+    expect(visuals.get('r1')?.description).toBeUndefined()
+  })
+})
+
 describe('parseGroupCell', () => {
   test('null and undefined return empty', () => {
     expect(parseGroupCell(null)).toEqual({ values: [], wasMulti: false })

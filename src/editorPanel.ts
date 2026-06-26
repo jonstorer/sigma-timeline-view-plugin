@@ -58,6 +58,14 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'descriptionColumn',
+    type: 'column',
+    label: 'Hover description column (shown on item hover, optional)',
+    source: SOURCE,
+    allowMultiple: false,
+  },
+
+  {
     name: 'statusColumn',
     type: 'column',
     label: 'Status column (enum value per row)',

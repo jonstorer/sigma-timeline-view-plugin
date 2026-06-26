@@ -240,6 +240,28 @@
   font-weight: 500;
 }
 
+/* ---- Item hover card ---------------------------------------------- */
+/* A single reused popup positioned fixed at the cursor on `itemover`.
+   Content is the raw description column value, so it sizes to whatever the
+   author provides; pre-wrap preserves line breaks without interpreting HTML. */
+
+.ts-hover-card {
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
 /* ---- Monday emphasis --------------------------------------------- */
 /* vis-timeline applies `.vis-monday` (and other weekday classes) to grid
    cells whenever the time-axis scale is `weekday` or `day` with step <= 2.
