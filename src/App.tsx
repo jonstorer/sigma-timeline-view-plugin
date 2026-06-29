@@ -4,7 +4,7 @@ import {
   useEditorPanelConfig,
   useElementData,
 } from '@sigmacomputing/plugin'
-import { editorPanelConfig, SOURCE, STATUS_LEGEND } from './editorPanel'
+import { editorPanelConfig, SOURCE } from './editorPanel'
 import { LiveTimeline, type ItemEditPayload } from './LiveTimeline'
 import { useTriggerWithValue } from './useTriggerWithValue'
 import type { TimelineConfig } from './types'
@@ -19,7 +19,6 @@ function App() {
   // treat undefined/'' as "unconfigured" (no-op). Default to '' so a partial
   // config stays type-clean without changing behavior.
   const data = useElementData(config?.[SOURCE] ?? '')
-  const legendData = useElementData(config?.[STATUS_LEGEND] ?? '')
 
   // Drag-edit: write the {id,startDate,endDate} payload, then fire the edit action.
   const fireEdit = useTriggerWithValue(
@@ -61,7 +60,6 @@ function App() {
     <LiveTimeline
       config={config}
       data={data}
-      legendData={legendData}
       onItemEdit={editEnabled ? onItemEdit : undefined}
       onItemSelect={selectEnabled ? onItemSelect : undefined}
     />

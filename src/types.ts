@@ -9,21 +9,19 @@ import type { DataGroup, DataItem } from 'vis-timeline/esnext'
  */
 export interface TimelineConfig {
   source?: string
-  statusLegend?: string
   idColumn?: string
   label?: string
   group?: string | string[]
   startDate?: string
   endDate?: string
+  highlightColorColumn?: string
   pillLabelColumn?: string
+  pillColorColumn?: string
   descriptionColumn?: string
   editPayloadVariable?: string
   editAction?: string
   recordIdVariable?: string
   selectAction?: string
-  statusColumn?: string
-  statusLegendName?: string
-  statusLegendColor?: string
 }
 
 export type GroupValue = string
@@ -32,7 +30,8 @@ export type GroupPath = GroupValue[]
 
 export interface ItemVisual {
   pill?: string
-  chipColor?: string
+  /** #hex from the pill color column; fills the pill background. */
+  pillColor?: string
   /** Raw value of the configured description column, shown on item hover. */
   description?: string
 }

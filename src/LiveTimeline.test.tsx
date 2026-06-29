@@ -113,7 +113,7 @@ describe('formatDragTooltip', () => {
 describe('LiveTimeline', () => {
   test('prompts for a data source when none configured', () => {
     const { getByText } = render(
-      <LiveTimeline config={null} data={undefined} legendData={undefined} />,
+      <LiveTimeline config={null} data={undefined} />,
     )
     expect(getByText(/Pick a data source/i)).toBeInTheDocument()
   })
@@ -123,7 +123,6 @@ describe('LiveTimeline', () => {
       <LiveTimeline
         config={{ [SOURCE]: 'element-1' }}
         data={undefined}
-        legendData={undefined}
       />,
     )
     expect(getByText(/Pick Start and End columns/i)).toBeInTheDocument()
@@ -144,7 +143,7 @@ describe('LiveTimeline', () => {
       id_col: ['r1', 'r2'],
     }
     const { getByText } = render(
-      <LiveTimeline config={config} data={data} legendData={undefined} />,
+      <LiveTimeline config={config} data={data} />,
     )
     expect(getByText(/^2 items\.$/)).toBeInTheDocument()
   })
@@ -166,7 +165,7 @@ describe('LiveTimeline', () => {
       id_col: ['r1', 'r2', 'r3'],
     }
     const { getByText } = render(
-      <LiveTimeline config={config} data={data} legendData={undefined} />,
+      <LiveTimeline config={config} data={data} />,
     )
     expect(getByText(/3 items across 2 lanes/i)).toBeInTheDocument()
   })
@@ -188,7 +187,7 @@ describe('LiveTimeline', () => {
       id_col: ['r1'],
     }
     const { getByText } = render(
-      <LiveTimeline config={config} data={data} legendData={undefined} />,
+      <LiveTimeline config={config} data={data} />,
     )
     expect(getByText(/1 item across 1 lane\./i)).toBeInTheDocument()
   })
@@ -200,7 +199,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
     expect(lastTimelineOptions().editable.updateTime).toBe(false)
@@ -211,7 +209,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={vi.fn()}
       />,
     )
@@ -223,7 +220,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={vi.fn()}
       />,
     )
@@ -238,7 +234,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
 
@@ -250,7 +245,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={vi.fn()}
       />,
     )
@@ -271,7 +265,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={onItemEdit}
       />,
     )
@@ -297,7 +290,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
 
@@ -318,7 +310,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={vi.fn()}
       />,
     )
@@ -337,7 +328,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
     const instance = lastTimelineInstance()
@@ -355,7 +345,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemEdit={vi.fn()}
       />,
     )
@@ -374,7 +363,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
     expect(lastTimelineInstance().setGroups).toHaveBeenCalledWith(undefined)
@@ -385,7 +373,6 @@ describe('LiveTimeline drag editing', () => {
       <LiveTimeline
         config={{ ...oneRowConfig, group: 'group_col' }}
         data={{ ...oneRowData, group_col: ['Alice'] }}
-        legendData={undefined}
       />,
     )
     expect(lastTimelineInstance().setGroups).toHaveBeenCalledWith(
@@ -402,7 +389,6 @@ describe('LiveTimeline double-click select', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemSelect={onItemSelect}
       />,
     )
@@ -418,7 +404,6 @@ describe('LiveTimeline double-click select', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
         onItemSelect={onItemSelect}
       />,
     )
@@ -433,7 +418,6 @@ describe('LiveTimeline double-click select', () => {
       <LiveTimeline
         config={oneRowConfig}
         data={oneRowData}
-        legendData={undefined}
       />,
     )
 

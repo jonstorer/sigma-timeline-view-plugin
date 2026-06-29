@@ -9,7 +9,7 @@ import {
   type TimelineOptions,
 } from 'vis-timeline/esnext'
 import moment from 'moment'
-import { buildColorByStatus, buildItemsAndGroups } from './buildItems'
+import { buildItemsAndGroups } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import { snapToDay, formatDragTooltip } from './dragHelpers'
@@ -26,7 +26,6 @@ export interface ItemEditPayload {
 export interface LiveTimelineProps {
   config: TimelineConfig | null | undefined
   data: Record<string, unknown[]> | undefined
-  legendData: Record<string, unknown[]> | undefined
   onItemEdit?: (payload: ItemEditPayload) => void
   onItemSelect?: (recordId: string) => void
 }
@@ -34,7 +33,6 @@ export interface LiveTimelineProps {
 export function LiveTimeline({
   config,
   data,
-  legendData,
   onItemEdit,
   onItemSelect,
 }: LiveTimelineProps) {
@@ -47,14 +45,9 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
 
-  const colorByStatus = useMemo(
-    () => buildColorByStatus(config, legendData),
-    [config, legendData],
-  )
-
   const { items, groups, visuals, rowIdByItemId } = useMemo(
-    () => buildItemsAndGroups(config, data, colorByStatus),
-    [config, data, colorByStatus],
+    () => buildItemsAndGroups(config, data),
+    [config, data],
   )
 
   useEffect(() => {
