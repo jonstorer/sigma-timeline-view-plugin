@@ -71,27 +71,6 @@ export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   return paths
 }
 
-export function buildColorByStatus(
-  config: TimelineConfig | null | undefined,
-  legendData: Record<string, unknown[]> | undefined,
-): Map<string, string> {
-  const map = new Map<string, string>()
-  if (!config || !legendData) return map
-  const nameCol = config.statusLegendName
-  const colorCol = config.statusLegendColor
-  if (!nameCol || !colorCol) return map
-  const names = legendData[nameCol] ?? []
-  const colors = legendData[colorCol] ?? []
-  for (let i = 0; i < names.length; i++) {
-    const n = names[i]
-    const c = colors[i]
-    if (n != null && c != null && String(c).trim() !== '') {
-      map.set(String(n), String(c))
-    }
-  }
-  return map
-}
-
 function normalizeGroupCols(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map(String).filter((s) => s !== '')
   if (raw == null || raw === '') return []
@@ -107,7 +86,6 @@ interface GroupNode {
 export function buildItemsAndGroups(
   config: TimelineConfig | null | undefined,
   data: Record<string, unknown[]> | undefined,
-  colorByStatus: Map<string, string>,
 ): BuildResult {
   const visuals = new Map<string, ItemVisual>()
   const rowIdByItemId = new Map<string, unknown>()
@@ -121,8 +99,9 @@ export function buildItemsAndGroups(
   const endCol = config.endDate
   const labelCol = config.label
   const idCol = config.idColumn
-  const statusCol = config.statusColumn
+  const highlightCol = config.highlightColorColumn
   const pillCol = config.pillLabelColumn
+  const pillColorCol = config.pillColorColumn
   const descCol = config.descriptionColumn
 
   const groupCols = normalizeGroupCols(config.group)
@@ -136,8 +115,9 @@ export function buildItemsAndGroups(
   const labels = labelCol ? (data[labelCol] ?? []) : []
   const groupColumnData = groupCols.map((col) => data[col] ?? [])
   const ids = idCol ? (data[idCol] ?? []) : []
-  const statuses = statusCol ? (data[statusCol] ?? []) : []
+  const highlights = highlightCol ? (data[highlightCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
+  const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
   const descriptions = descCol ? (data[descCol] ?? []) : []
 
   const rowCount = starts.length
@@ -169,17 +149,19 @@ export function buildItemsAndGroups(
     const rowId = idCol ? ids[i] : `__row_${i}`
     const label = labelCol ? String(labels[i] ?? '') : ''
 
-    const status = statusCol ? String(statuses[i] ?? '') : ''
-    const color = status ? colorByStatus.get(status) : undefined
-    const style = color ? `box-shadow: inset 5px 0 0 ${color};` : undefined
+    const highlightColor = highlightCol ? String(highlights[i] ?? '').trim() : ''
+    const style = highlightColor
+      ? `box-shadow: inset 6px 0 0 ${highlightColor};`
+      : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
+    const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const description = descCol ? String(descriptions[i] ?? '').trim() : ''
 
     const pushItem = (itemId: string, group?: string) => {
-      if (pill || color || description) {
+      if (pill || pillColor || description) {
         visuals.set(itemId, {
           ...(pill ? { pill } : {}),
-          ...(color ? { chipColor: color } : {}),
+          ...(pillColor ? { pillColor } : {}),
           ...(description ? { description } : {}),
         })
       }

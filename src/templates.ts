@@ -11,16 +11,11 @@ export function renderItemContent(
   if (!visual) return text
   const wrapper = document.createElement('span')
   wrapper.className = 'ts-item-wrapper'
-  if (visual.chipColor) {
-    const chip = document.createElement('span')
-    chip.className = 'ts-status-chip'
-    chip.style.backgroundColor = visual.chipColor
-    wrapper.appendChild(chip)
-  }
   if (visual.pill) {
     const pillEl = document.createElement('span')
     pillEl.className = 'ts-pill'
     pillEl.textContent = visual.pill
+    if (visual.pillColor) pillEl.style.backgroundColor = visual.pillColor
     wrapper.appendChild(pillEl)
   }
   const textEl = document.createElement('span')

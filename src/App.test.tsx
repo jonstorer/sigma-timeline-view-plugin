@@ -21,7 +21,6 @@ vi.mock('./LiveTimeline', () => ({
   }: {
     config: unknown
     data: unknown
-    legendData: unknown
   }) => (
     <div data-testid="live-timeline-stub">{JSON.stringify(config ?? {})}</div>
   ),

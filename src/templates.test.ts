@@ -22,30 +22,15 @@ describe('renderItemContent', () => {
   })
 
   test('renders wrapper with text node when only label exists in visuals', () => {
-    // Visual entry exists but has no pill or chip — wrapper should still render
-    // with the text. (Note: visuals isn't set in current build for label-only,
-    // but the renderer handles this defensively.)
+    // Visual entry exists but has no pill — wrapper should still render with
+    // the text. (Note: visuals isn't set in current build for label-only, but
+    // the renderer handles this defensively.)
     const visuals = new Map<string, ItemVisual>([['x', { pill: '' }]])
     const out = renderItemContent(makeItem('x', 'Hello'), visuals)
     expect(out).toBeInstanceOf(HTMLElement)
     if (out instanceof HTMLElement) {
       expect(out.className).toBe('ts-item-wrapper')
       expect(out.querySelector('.ts-item-text')?.textContent).toBe('Hello')
-    }
-  })
-
-  test('renders chip with backgroundColor when chipColor is set', () => {
-    const visuals = new Map<string, ItemVisual>([
-      ['x', { chipColor: '#22c55e' }],
-    ])
-    const out = renderItemContent(makeItem('x', 'Task'), visuals)
-    expect(out).toBeInstanceOf(HTMLElement)
-    if (out instanceof HTMLElement) {
-      const chip = out.querySelector<HTMLElement>('.ts-status-chip')
-      expect(chip).not.toBeNull()
-      expect(chip!.style.backgroundColor).toBe('rgb(34, 197, 94)')
-      // Chip comes before the text
-      expect(out.firstChild).toBe(chip)
     }
   })
 
@@ -59,19 +44,37 @@ describe('renderItemContent', () => {
     }
   })
 
-  test('renders chip + pill + text together in order', () => {
+  test('fills the pill background from pillColor when set', () => {
     const visuals = new Map<string, ItemVisual>([
-      ['x', { chipColor: '#3b82f6', pill: 'TAG' }],
+      ['x', { pill: 'HIGH', pillColor: '#ef4444' }],
     ])
+    const out = renderItemContent(makeItem('x', 'Task'), visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    if (out instanceof HTMLElement) {
+      const pill = out.querySelector<HTMLElement>('.ts-pill')
+      expect(pill!.style.backgroundColor).toBe('rgb(239, 68, 68)')
+    }
+  })
+
+  test('pill with no pillColor leaves the inline background unset (CSS default applies)', () => {
+    const visuals = new Map<string, ItemVisual>([['x', { pill: 'P1' }]])
+    const out = renderItemContent(makeItem('x', 'Task'), visuals)
+    if (out instanceof HTMLElement) {
+      const pill = out.querySelector<HTMLElement>('.ts-pill')
+      expect(pill!.style.backgroundColor).toBe('')
+    }
+  })
+
+  test('renders pill + text together in order', () => {
+    const visuals = new Map<string, ItemVisual>([['x', { pill: 'TAG' }]])
     const out = renderItemContent(makeItem('x', 'Body'), visuals)
     expect(out).toBeInstanceOf(HTMLElement)
     if (out instanceof HTMLElement) {
       const children = Array.from(out.children) as HTMLElement[]
-      expect(children).toHaveLength(3)
-      expect(children[0].className).toBe('ts-status-chip')
-      expect(children[1].className).toBe('ts-pill')
-      expect(children[2].className).toBe('ts-item-text')
-      expect(children[2].textContent).toBe('Body')
+      expect(children).toHaveLength(2)
+      expect(children[0].className).toBe('ts-pill')
+      expect(children[1].className).toBe('ts-item-text')
+      expect(children[1].textContent).toBe('Body')
     }
   })
 
@@ -90,9 +93,7 @@ describe('renderItemContent', () => {
   })
 
   test('item id is coerced to string for visuals lookup', () => {
-    const visuals = new Map<string, ItemVisual>([
-      ['42', { chipColor: '#000' }],
-    ])
+    const visuals = new Map<string, ItemVisual>([['42', { pill: 'X' }]])
     const item = { id: 42 as unknown as string, content: 'X', start: new Date() }
     const out = renderItemContent(item as TimelineItem, visuals)
     expect(out).toBeInstanceOf(HTMLElement)

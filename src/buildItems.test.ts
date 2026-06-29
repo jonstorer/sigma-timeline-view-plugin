@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 import {
-  buildColorByStatus,
   buildItemsAndGroups,
   buildPathsForRow,
   parseGroupCell,
@@ -16,7 +15,7 @@ describe('buildItemsAndGroups rowIdByItemId', () => {
       end: ['2026-01-05', '2026-02-05'],
       id: ['r1', 'r2'],
     }
-    const { rowIdByItemId } = buildItemsAndGroups(config, data, new Map())
+    const { rowIdByItemId } = buildItemsAndGroups(config, data)
     expect(rowIdByItemId.get('r1')).toBe('r1')
     expect(rowIdByItemId.get('r2')).toBe('r2')
   })
@@ -36,7 +35,7 @@ describe('buildItemsAndGroups description', () => {
       id: ['r1', 'r2'],
       desc: ['Kickoff meeting\nwith client', ''],
     }
-    const { visuals } = buildItemsAndGroups(config, data, new Map())
+    const { visuals } = buildItemsAndGroups(config, data)
     expect(visuals.get('r1')?.description).toBe('Kickoff meeting\nwith client')
     // Blank cells leave no description (and no visual at all here).
     expect(visuals.has('r2')).toBe(false)
@@ -49,7 +48,7 @@ describe('buildItemsAndGroups description', () => {
       end: ['2026-01-05'],
       id: ['r1'],
     }
-    const { visuals } = buildItemsAndGroups(config, data, new Map())
+    const { visuals } = buildItemsAndGroups(config, data)
     expect(visuals.get('r1')?.description).toBeUndefined()
   })
 })
@@ -154,63 +153,6 @@ describe('safeId', () => {
   })
 })
 
-describe('buildColorByStatus', () => {
-  test('empty when config or legendData is missing', () => {
-    expect(buildColorByStatus(null, undefined).size).toBe(0)
-    expect(buildColorByStatus({}, undefined).size).toBe(0)
-    expect(buildColorByStatus(null, {})).toEqual(new Map())
-  })
-
-  test('empty when legend column names are not configured', () => {
-    expect(buildColorByStatus({}, { x: ['a'] }).size).toBe(0)
-  })
-
-  test('builds map from legend columns', () => {
-    const config = {
-      statusLegendName: 'name_col',
-      statusLegendColor: 'color_col',
-    }
-    const legendData = {
-      name_col: ['On Track', 'Open', 'Done'],
-      color_col: ['#22c55e', '#3b82f6', '#a3a3a3'],
-    }
-    const result = buildColorByStatus(config, legendData)
-    expect(result.get('On Track')).toBe('#22c55e')
-    expect(result.get('Open')).toBe('#3b82f6')
-    expect(result.get('Done')).toBe('#a3a3a3')
-    expect(result.size).toBe(3)
-  })
-
-  test('skips rows with null name or color', () => {
-    const config = {
-      statusLegendName: 'name_col',
-      statusLegendColor: 'color_col',
-    }
-    const legendData = {
-      name_col: ['A', null, 'C'],
-      color_col: ['#111', '#222', null],
-    }
-    const result = buildColorByStatus(config, legendData)
-    expect(result.get('A')).toBe('#111')
-    expect(result.has('C')).toBe(false)
-    expect(result.size).toBe(1)
-  })
-
-  test('skips rows with whitespace-only color', () => {
-    const config = {
-      statusLegendName: 'name_col',
-      statusLegendColor: 'color_col',
-    }
-    const legendData = {
-      name_col: ['A', 'B'],
-      color_col: ['#aaa', '   '],
-    }
-    const result = buildColorByStatus(config, legendData)
-    expect(result.size).toBe(1)
-    expect(result.get('A')).toBe('#aaa')
-  })
-})
-
 describe('buildItemsAndGroups', () => {
   const baseConfig = {
     startDate: 'start_col',
@@ -221,17 +163,13 @@ describe('buildItemsAndGroups', () => {
   }
 
   test('returns empty when config is missing', () => {
-    const result = buildItemsAndGroups(null, undefined, new Map())
+    const result = buildItemsAndGroups(null, undefined)
     expect(result.items).toEqual([])
     expect(result.groups).toEqual([])
   })
 
   test('returns empty when required cols are not configured', () => {
-    const result = buildItemsAndGroups(
-      { label: 'x' },
-      { x: [1] },
-      new Map(),
-    )
+    const result = buildItemsAndGroups({ label: 'x' }, { x: [1] })
     expect(result.items).toEqual([])
     expect(result.groups).toEqual([])
   })
@@ -244,7 +182,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['Task A'],
       id_col: ['r1'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items).toHaveLength(1)
     expect(result.items[0]).toMatchObject({
       id: 'r1|Alice',
@@ -264,7 +202,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['Task'],
       id_col: ['r1'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items).toHaveLength(2)
     for (const item of result.items) {
       expect(result.rowIdByItemId.get(String(item.id))).toBe('r1')
@@ -279,7 +217,7 @@ describe('buildItemsAndGroups', () => {
       group_col: ['Alice'],
       label_col: ['T'],
     }
-    const result = buildItemsAndGroups(cfg, data, new Map())
+    const result = buildItemsAndGroups(cfg, data)
     expect(result.items).toHaveLength(1)
     expect(result.rowIdByItemId.size).toBe(0)
   })
@@ -292,7 +230,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['Task'],
       id_col: ['r1'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items).toHaveLength(2)
     expect(result.items.map((i) => i.group).sort()).toEqual(['Alice', 'Bob'])
     expect(result.groups.map((g) => g.id).sort()).toEqual(['Alice', 'Bob'])
@@ -306,7 +244,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['', '', ''],
       id_col: ['r1', 'r2', 'r3'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.groups.map((g) => g.id)).toEqual(['Alice', 'Mike', 'Zach'])
   })
 
@@ -318,7 +256,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['', '', ''],
       id_col: ['r1', 'r2', 'r3'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items).toHaveLength(1)
     expect(result.items[0].group).toBe('A')
   })
@@ -331,44 +269,41 @@ describe('buildItemsAndGroups', () => {
       label_col: ['', ''],
       id_col: ['r1', 'r2'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items).toHaveLength(1)
   })
 
-  test('status color is applied as inline box-shadow style', () => {
+  test('highlight color column drives the inline box-shadow style (no visual on its own)', () => {
     const data = {
       start_col: ['2026-05-01'],
       end_col: ['2026-05-08'],
       group_col: ['Alice'],
       label_col: ['T'],
       id_col: ['r1'],
-      status_col: ['On Track'],
+      color_col: ['#22c55e'],
     }
-    const colorMap = new Map([['On Track', '#22c55e']])
     const result = buildItemsAndGroups(
-      { ...baseConfig, statusColumn: 'status_col' },
+      { ...baseConfig, highlightColorColumn: 'color_col' },
       data,
-      colorMap,
     )
-    expect(result.items[0].style).toBe(
-      'box-shadow: inset 5px 0 0 #22c55e;',
-    )
-    expect(result.visuals.get('r1|Alice')).toEqual({ chipColor: '#22c55e' })
+    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
+    // The bar lives in the item style, not the visuals map — a row with only a
+    // highlight color has nothing to render inside the item.
+    expect(result.visuals.has('r1|Alice')).toBe(false)
   })
 
-  test('status without legend match leaves item un-styled', () => {
+  test('blank highlight color leaves the item un-styled with no visual', () => {
     const data = {
       start_col: ['2026-05-01'],
       end_col: ['2026-05-08'],
       group_col: ['Alice'],
       label_col: ['T'],
       id_col: ['r1'],
-      status_col: ['Unknown'],
+      color_col: ['   '],
     }
     const result = buildItemsAndGroups(
-      { ...baseConfig, statusColumn: 'status_col' },
+      { ...baseConfig, highlightColorColumn: 'color_col' },
       data,
-      new Map([['On Track', '#22c55e']]),
     )
     expect(result.items[0].style).toBeUndefined()
     expect(result.visuals.has('r1|Alice')).toBe(false)
@@ -386,10 +321,61 @@ describe('buildItemsAndGroups', () => {
     const result = buildItemsAndGroups(
       { ...baseConfig, pillLabelColumn: 'pill_col' },
       data,
-      new Map(),
     )
     expect(result.visuals.get('r1|Alice')).toEqual({ pill: 'P1' })
     expect(result.items[0].style).toBeUndefined()
+  })
+
+  test('pill color column rides into visuals alongside the pill text', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      group_col: ['Alice'],
+      label_col: ['T'],
+      id_col: ['r1'],
+      pill_col: ['HIGH'],
+      pillcolor_col: ['#ef4444'],
+    }
+    const result = buildItemsAndGroups(
+      {
+        ...baseConfig,
+        pillLabelColumn: 'pill_col',
+        pillColorColumn: 'pillcolor_col',
+      },
+      data,
+    )
+    expect(result.visuals.get('r1|Alice')).toEqual({
+      pill: 'HIGH',
+      pillColor: '#ef4444',
+    })
+    expect(result.items[0].style).toBeUndefined()
+  })
+
+  test('highlight and pill colors are independent — both can appear on one item', () => {
+    const data = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      group_col: ['Alice'],
+      label_col: ['T'],
+      id_col: ['r1'],
+      color_col: ['#22c55e'],
+      pill_col: ['HIGH'],
+      pillcolor_col: ['#ef4444'],
+    }
+    const result = buildItemsAndGroups(
+      {
+        ...baseConfig,
+        highlightColorColumn: 'color_col',
+        pillLabelColumn: 'pill_col',
+        pillColorColumn: 'pillcolor_col',
+      },
+      data,
+    )
+    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
+    expect(result.visuals.get('r1|Alice')).toEqual({
+      pill: 'HIGH',
+      pillColor: '#ef4444',
+    })
   })
 
   test('row ids fall back to row index when idColumn is not configured', () => {
@@ -403,7 +389,7 @@ describe('buildItemsAndGroups', () => {
       end_col: ['2026-05-08'],
       group_col: ['Alice'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
     expect(result.items[0].id).toBe('__row_0|Alice')
   })
 
@@ -415,7 +401,7 @@ describe('buildItemsAndGroups', () => {
       label_col: ['T'],
       id_col: ['weird|id'],
     }
-    const result = buildItemsAndGroups(baseConfig, data, new Map())
+    const result = buildItemsAndGroups(baseConfig, data)
     expect(result.items[0].id).toBe('weird\\|id|Alice')
   })
 
@@ -434,7 +420,6 @@ describe('buildItemsAndGroups', () => {
         idColumn: 'id_col',
       },
       data,
-      new Map(),
     )
     expect(result.groups).toEqual([])
     expect(result.items).toHaveLength(2)
@@ -451,23 +436,19 @@ describe('buildItemsAndGroups', () => {
       label_col: ['T'],
       id_col: ['r1'],
     }
-    const result = buildItemsAndGroups(
-      { ...baseConfig, group: [] },
-      data,
-      new Map(),
-    )
+    const result = buildItemsAndGroups({ ...baseConfig, group: [] }, data)
     expect(result.groups).toEqual([])
     expect(result.items).toHaveLength(1)
     expect(result.items[0]).not.toHaveProperty('group')
   })
 
-  test('ungrouped items still carry status visuals', () => {
+  test('ungrouped items still carry the highlight bar style', () => {
     const data = {
       start_col: ['2026-05-01'],
       end_col: ['2026-05-08'],
       label_col: ['T'],
       id_col: ['r1'],
-      status_col: ['On Track'],
+      color_col: ['#22c55e'],
     }
     const result = buildItemsAndGroups(
       {
@@ -475,13 +456,12 @@ describe('buildItemsAndGroups', () => {
         endDate: 'end_col',
         label: 'label_col',
         idColumn: 'id_col',
-        statusColumn: 'status_col',
+        highlightColorColumn: 'color_col',
       },
       data,
-      new Map([['On Track', '#22c55e']]),
     )
-    expect(result.items[0].style).toBe('box-shadow: inset 5px 0 0 #22c55e;')
-    expect(result.visuals.get('r1')).toEqual({ chipColor: '#22c55e' })
+    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
+    expect(result.visuals.has('r1')).toBe(false)
   })
 
   test('group column may be passed as a single-element array', () => {
@@ -496,7 +476,6 @@ describe('buildItemsAndGroups', () => {
     const result = buildItemsAndGroups(
       { ...baseConfig, group: ['group_col'] },
       data,
-      new Map(),
     )
     expect(result.items).toHaveLength(1)
     expect(result.groups).toEqual([{ id: 'Alice', content: 'Alice' }])
@@ -615,7 +594,7 @@ describe('buildItemsAndGroups — multi-level', () => {
       label_col: ['T1', 'T2'],
       id_col: ['r1', 'r2'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
 
     // Two items, each placed in its leaf group
     expect(result.items.map((i) => i.group).sort()).toEqual([
@@ -649,7 +628,7 @@ describe('buildItemsAndGroups — multi-level', () => {
       label_col: ['T1', 'T2'],
       id_col: ['r1', 'r2'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
     const alpha = result.groups.find((g) => g.id === 'Alpha')!
     expect(alpha.nestedGroups).toEqual(['Alpha|Alice', 'Alpha|Bob'])
   })
@@ -665,7 +644,7 @@ describe('buildItemsAndGroups — multi-level', () => {
       label_col: ['Cross-team'],
       id_col: ['r1'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
     expect(result.items).toHaveLength(4)
     expect(result.items.map((i) => i.group).sort()).toEqual([
       'Alpha|Alice',
@@ -684,7 +663,7 @@ describe('buildItemsAndGroups — multi-level', () => {
       label_col: ['', '', ''],
       id_col: ['r1', 'r2', 'r3'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
     const alpha = result.groups.find((g) => g.id === 'Alpha')!
     expect(alpha.nestedGroups).toEqual([
       'Alpha|Alice',
@@ -712,7 +691,6 @@ describe('buildItemsAndGroups — multi-level', () => {
         idColumn: 'id_col',
       },
       data,
-      new Map(),
     )
     expect(result.groups.map((g) => g.id).sort()).toEqual([
       'NA',
@@ -739,7 +717,7 @@ describe('buildItemsAndGroups — multi-level', () => {
       label_col: ['A1', 'A2'],
       id_col: ['r1', 'r2'],
     }
-    const result = buildItemsAndGroups(config, data, new Map())
+    const result = buildItemsAndGroups(config, data)
     expect(result.items.map((i) => i.id).sort()).toEqual([
       'r1|Alpha|Alice',
       'r2|Beta|Alice',

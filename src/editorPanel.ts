@@ -1,7 +1,6 @@
 import type { CustomPluginConfigOptions } from '@sigmacomputing/plugin'
 
 export const SOURCE = 'source'
-export const STATUS_LEGEND = 'statusLegend'
 
 export const editorPanelConfig: CustomPluginConfigOptions[] = [
   { name: SOURCE, type: 'element', label: 'Data source' },
@@ -50,6 +49,15 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'highlightColorColumn',
+    type: 'column',
+    label: 'Highlight color column (#hex, optional)',
+    source: SOURCE,
+    allowedTypes: ['text'],
+    allowMultiple: false,
+  },
+
+  {
     name: 'pillLabelColumn',
     type: 'column',
     label: 'Pill label column (left side text, optional)',
@@ -58,17 +66,18 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
-    name: 'descriptionColumn',
+    name: 'pillColorColumn',
     type: 'column',
-    label: 'Hover description column (shown on item hover, optional)',
+    label: 'Pill color column (#hex, optional)',
     source: SOURCE,
+    allowedTypes: ['text'],
     allowMultiple: false,
   },
 
   {
-    name: 'statusColumn',
+    name: 'descriptionColumn',
     type: 'column',
-    label: 'Status column (enum value per row)',
+    label: 'Hover description column (shown on item hover, optional)',
     source: SOURCE,
     allowMultiple: false,
   },
@@ -96,24 +105,5 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     name: 'selectAction',
     type: 'action-trigger',
     label: 'On select action (fires after the JSON is set)',
-  },
-
-  { name: STATUS_LEGEND, type: 'element', label: 'Status legend table' },
-
-  {
-    name: 'statusLegendName',
-    type: 'column',
-    label: 'Legend: status value column',
-    source: STATUS_LEGEND,
-    allowMultiple: false,
-  },
-
-  {
-    name: 'statusLegendColor',
-    type: 'column',
-    label: 'Legend: status color column (#hex)',
-    source: STATUS_LEGEND,
-    allowedTypes: ['text'],
-    allowMultiple: false,
   },
 ]

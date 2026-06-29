@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { editorPanelConfig, SOURCE, STATUS_LEGEND } from './editorPanel'
+import { editorPanelConfig, SOURCE } from './editorPanel'
 
 describe('editorPanelConfig', () => {
   test('exposes a non-empty array', () => {
@@ -40,7 +40,6 @@ describe('editorPanelConfig', () => {
         .map((e) => e.name),
     )
     expect(elementNames.has(SOURCE)).toBe(true)
-    expect(elementNames.has(STATUS_LEGEND)).toBe(true)
 
     for (const entry of editorPanelConfig) {
       if (entry.type === 'column') {
@@ -49,15 +48,10 @@ describe('editorPanelConfig', () => {
     }
   })
 
-  test('legend columns source from STATUS_LEGEND', () => {
+  test('highlight and pill color columns source from the main SOURCE', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
-    expect(byName.statusLegendName).toMatchObject({ source: STATUS_LEGEND })
-    expect(byName.statusLegendColor).toMatchObject({ source: STATUS_LEGEND })
-  })
-
-  test('statusColumn sources from main SOURCE (not legend)', () => {
-    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
-    expect(byName.statusColumn).toMatchObject({ source: SOURCE })
+    expect(byName.highlightColorColumn).toMatchObject({ source: SOURCE })
+    expect(byName.pillColorColumn).toMatchObject({ source: SOURCE })
   })
 
   test('edit slots are present: text variable + action trigger', () => {

@@ -32,8 +32,10 @@ and exposes its config slots in Sigma's editor panel.
 - Select an item to fire a Sigma Action with the row's pass-through columns as a
   JSON payload — e.g. to populate a detail form for the record with no
   per-column lookups, since the values ride along in the payload.
-- Optional status color bar on the left edge of each item, plus an optional
-  small colored chip and/or text pill inside the item.
+- Optional per-row highlight color (a source column holding a `#hex`) shown as
+  a left-edge bar on the item, and an optional text pill that can carry its own
+  per-row color — all read straight from source columns (no separate legend
+  table or status lookup).
 - Visible-window range (start + end) is pushed to workbook variables on every
   pan/zoom, so a Sigma-side filter can lazy-load only the rows in view.
 
@@ -101,15 +103,17 @@ available to serialize.
 
 ### Visual styling (optional)
 
+Colors are read directly from the source table — each color slot is a column
+holding a `#hex` string per row. There's no separate legend table or status
+lookup; map the color on the source (e.g. a calculated column) and point the
+slot at it.
+
 | Slot | Type | Purpose |
 |---|---|---|
-| `statusColumn` | column | Enum value per row — looked up in `statusLegend`. |
-| `statusLegend` | element | A separate table mapping enum value → color. |
-| `statusLegendName` | column | The status-value column on the legend table. |
-| `statusLegendColor` | column (text) | The color column on the legend table (e.g. `#3b82f6`). |
-| `featureStatusColumn` | column | A second enum column; rendered as a small colored chip inside the item. Uses the same `statusLegend`. |
+| `highlightColorColumn` | column (text) | Per-row `#hex` — drives the left-edge highlight bar on the item. Blank rows render un-highlighted. |
 | `pillLabelColumn` | column | Text shown as a Bootstrap-style pill on the left of the item. |
-| `groupSubtitle` | text | Subtitle under each swimlane name (e.g. "Objective", "Assignee"). |
+| `pillColorColumn` | column (text) | Per-row `#hex` filling the pill background (falls back to the default grey when blank). |
+| `descriptionColumn` | column | Shown in the hover card when the item is hovered. |
 
 ### Multi-level grouping
 
