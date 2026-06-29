@@ -16,6 +16,8 @@ vi.mock('vis-timeline/esnext', async () => {
       setGroups: vi.fn(),
       setOptions: vi.fn(),
       on: vi.fn(),
+      getEventProperties: vi.fn(() => ({ item: undefined })),
+      setSelection: vi.fn(),
     })),
   }
 })
@@ -46,6 +48,8 @@ const lastTimelineInstance = () =>
     setOptions: ReturnType<typeof vi.fn>
     setGroups: ReturnType<typeof vi.fn>
     on: ReturnType<typeof vi.fn>
+    getEventProperties: ReturnType<typeof vi.fn>
+    setSelection: ReturnType<typeof vi.fn>
   }
 
 // Pull the callback LiveTimeline registered for a given Timeline event.
@@ -304,6 +308,65 @@ describe('LiveTimeline drag editing', () => {
     )
 
     expect(callback).toHaveBeenCalledWith(null)
+  })
+
+  // vis-timeline only builds its drag-time date tooltip for *selected* items,
+  // but itemsAlwaysDraggable lets a drag start without selecting. Selecting the
+  // item under the pointer on pointerdown is what makes the tooltip appear.
+  test('selects the item under the pointer on pointerdown so the drag tooltip shows', () => {
+    const { container } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    const instance = lastTimelineInstance()
+    instance.getEventProperties.mockReturnValue({ item: 'r1' })
+
+    container
+      .querySelector('.timeline-host')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true }))
+
+    expect(instance.setSelection).toHaveBeenCalledWith(['r1'])
+  })
+
+  test('does not select on pointerdown when no edit handler is wired (drag disabled)', () => {
+    const { container } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+      />,
+    )
+    const instance = lastTimelineInstance()
+    instance.getEventProperties.mockReturnValue({ item: 'r1' })
+
+    container
+      .querySelector('.timeline-host')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true }))
+
+    expect(instance.setSelection).not.toHaveBeenCalled()
+  })
+
+  test('ignores a pointerdown that lands on empty space (no item)', () => {
+    const { container } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        legendData={undefined}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    const instance = lastTimelineInstance()
+    instance.getEventProperties.mockReturnValue({ item: null })
+
+    container
+      .querySelector('.timeline-host')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true }))
+
+    expect(instance.setSelection).not.toHaveBeenCalled()
   })
 
   test('switches the Timeline to ungrouped mode with setGroups(undefined) when no group columns', () => {

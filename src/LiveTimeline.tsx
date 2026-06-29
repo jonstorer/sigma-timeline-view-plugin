@@ -74,7 +74,8 @@ export function LiveTimeline({
   }, [onItemSelect])
 
   useEffect(() => {
-    if (!containerRef.current) return
+    const container = containerRef.current
+    if (!container) return
     const itemsDs = new DataSet<DataItem>()
     const groupsDs = new DataSet<DataGroup>()
     itemsDsRef.current = itemsDs
@@ -141,8 +142,21 @@ export function LiveTimeline({
         renderItemContent(item, visualsRef.current),
     }
 
-    const tl = new Timeline(containerRef.current, itemsDs, groupsDs, options)
+    const tl = new Timeline(container, itemsDs, groupsDs, options)
     timelineRef.current = tl
+
+    // vis-timeline only builds its drag tooltip (the date readout shown while
+    // an item's start/end is dragged) for *selected* items. With
+    // itemsAlwaysDraggable a body drag can claim the gesture without the item
+    // ever being selected, so the tooltip never appears. Select the item under
+    // the pointer on pointerdown so the tooltip exists before the drag moves.
+    // Gated to edit mode: selection is only useful here to drive that tooltip.
+    const selectOnPointerDown = (event: PointerEvent) => {
+      if (!onItemEditRef.current) return
+      const itemId = tl.getEventProperties(event).item
+      if (itemId != null) tl.setSelection([itemId])
+    }
+    container.addEventListener('pointerdown', selectOnPointerDown)
 
     // Hover card: a single reused popup element. The plugin doesn't format the
     // value — it shows the raw description column verbatim, so authors control
@@ -150,7 +164,7 @@ export function LiveTimeline({
     const hoverCard = document.createElement('div')
     hoverCard.className = 'ts-hover-card'
     hoverCard.style.display = 'none'
-    containerRef.current.appendChild(hoverCard)
+    container.appendChild(hoverCard)
 
     const hideHoverCard = () => {
       hoverCard.style.display = 'none'
@@ -199,6 +213,7 @@ export function LiveTimeline({
     })
 
     return () => {
+      container.removeEventListener('pointerdown', selectOnPointerDown)
       tl.destroy()
       hoverCard.remove()
       timelineRef.current = null
