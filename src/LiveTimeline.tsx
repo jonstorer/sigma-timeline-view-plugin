@@ -9,7 +9,7 @@ import {
   type TimelineOptions,
 } from 'vis-timeline/esnext'
 import moment from 'moment'
-import { buildItemsAndGroups } from './buildItems'
+import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import { snapToDay, formatDragTooltip } from './dragHelpers'
@@ -17,11 +17,16 @@ import type { ItemVisual, TimelineConfig } from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
-export interface ItemEditPayload {
-  id: unknown
-  startDate: string
-  endDate: string | null
-}
+/**
+ * Drag-edit write-back payload, serialized to the edit variable. Keyed by the
+ * *source column ids* — the same keys the data arrived under — so the edit
+ * action maps each field straight back to its column:
+ *   - id column   → the row id
+ *   - start / end → ISO timestamps
+ *   - each Group-by column → the row's full value set for that column after the
+ *     move (a between-swimlane drag swaps one lane; see `applyLaneMove`).
+ */
+export type ItemEditPayload = Record<string, unknown>
 
 export interface LiveTimelineProps {
   config: TimelineConfig | null | undefined
@@ -44,11 +49,29 @@ export function LiveTimeline({
   const rowIdByItemIdRef = useRef<Map<string, unknown>>(new Map())
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
+  // The current config (for the source column ids the edit payload is keyed by)
+  // and the group write-back context, read inside the once-wired onMove handler.
+  const configRef = useRef(config)
+  const groupCtxRef = useRef<
+    Pick<
+      ReturnType<typeof buildItemsAndGroups>,
+      'groupColumns' | 'originalPathByItemId' | 'groupValuesByRowId'
+    >
+  >({
+    groupColumns: [],
+    originalPathByItemId: new Map(),
+    groupValuesByRowId: new Map(),
+  })
 
-  const { items, groups, visuals, rowIdByItemId } = useMemo(
-    () => buildItemsAndGroups(config, data),
-    [config, data],
-  )
+  const {
+    items,
+    groups,
+    visuals,
+    rowIdByItemId,
+    groupColumns,
+    originalPathByItemId,
+    groupValuesByRowId,
+  } = useMemo(() => buildItemsAndGroups(config, data), [config, data])
 
   useEffect(() => {
     visualsRef.current = visuals
@@ -57,6 +80,18 @@ export function LiveTimeline({
   useEffect(() => {
     rowIdByItemIdRef.current = rowIdByItemId
   }, [rowIdByItemId])
+
+  useEffect(() => {
+    configRef.current = config
+  }, [config])
+
+  useEffect(() => {
+    groupCtxRef.current = {
+      groupColumns,
+      originalPathByItemId,
+      groupValuesByRowId,
+    }
+  }, [groupColumns, originalPathByItemId, groupValuesByRowId])
 
   useEffect(() => {
     onItemEditRef.current = onItemEdit
@@ -77,8 +112,9 @@ export function LiveTimeline({
     const options: TimelineOptions = {
       stack: true,
       orientation: 'top',
-      start: moment().subtract(1, 'month').toDate(),
-      end: moment().add(2, 'months').toDate(),
+      // No `start`/`end` here — the opening window is set with setWindow after
+      // construction (see below). Passing them as options would gate the chart's
+      // initial reveal on an unreliable rangechanged event in the Sigma iframe.
       zoomMin: 28 * DAY_MS,
       zoomMax: 730 * DAY_MS,
       zoomable: false,
@@ -99,7 +135,9 @@ export function LiveTimeline({
       verticalScroll: true,
       editable: {
         updateTime: Boolean(onItemEditRef.current),
-        updateGroup: false,
+        // Lane reassignment: dragging an item onto another swimlane writes the
+        // new lane back through the same edit payload/action (see onMove).
+        updateGroup: Boolean(onItemEditRef.current),
         add: false,
         remove: false,
       },
@@ -111,16 +149,39 @@ export function LiveTimeline({
       itemsAlwaysDraggable: { item: true, range: true },
       onMove: (item, callback) => {
         const handler = onItemEditRef.current
-        const rowId = rowIdByItemIdRef.current.get(String(item.id))
-        if (!handler || rowId == null) {
+        const itemId = String(item.id)
+        const rowId = rowIdByItemIdRef.current.get(itemId)
+        const cfg = configRef.current
+        const idCol = cfg?.idColumn
+        const startCol = cfg?.startDate
+        const endCol = cfg?.endDate
+        if (!handler || rowId == null || !idCol || !startCol || !endCol) {
           callback(null)
           return
         }
-        handler({
-          id: rowId,
-          startDate: new Date(item.start as Date).toISOString(),
-          endDate: item.end ? new Date(item.end as Date).toISOString() : null,
-        })
+        // Key the payload by the source column ids (the same keys the data
+        // arrived under) so the edit action maps each field back to its column.
+        const payload: ItemEditPayload = {
+          [idCol]: rowId,
+          [startCol]: new Date(item.start as Date).toISOString(),
+          [endCol]: item.end ? new Date(item.end as Date).toISOString() : null,
+        }
+        // Lane reassignment: item.group is the lane the item was dropped onto.
+        // Treat each group column independently and emit its full value set for
+        // the row after swapping this item's old lane value for the new one.
+        const { groupColumns, originalPathByItemId, groupValuesByRowId } =
+          groupCtxRef.current
+        if (groupColumns.length > 0 && item.group != null) {
+          const oldPath = originalPathByItemId.get(itemId) ?? []
+          const newPath = parseGroupId(String(item.group))
+          const current =
+            groupValuesByRowId.get(String(rowId)) ?? groupColumns.map(() => [])
+          const updated = applyLaneMove(current, oldPath, newPath)
+          groupColumns.forEach((col, idx) => {
+            payload[col] = updated[idx] ?? []
+          })
+        }
+        handler(payload)
         callback(item)
       },
       moment: (date: moment.MomentInput) => moment(date),
@@ -137,6 +198,18 @@ export function LiveTimeline({
 
     const tl = new Timeline(container, itemsDs, groupsDs, options)
     timelineRef.current = tl
+
+    // Opening zoom: a 3-month window (one month back, two forward). Set via
+    // setWindow rather than the `start`/`end` options on purpose — those options
+    // gate vis-timeline's initial reveal on a `rangechanged` event that doesn't
+    // fire reliably inside the Sigma iframe, which leaves the whole chart
+    // positioned but stuck at visibility:hidden. Omitting them keeps the reveal
+    // unconditional; setWindow still gives us the exact starting window.
+    tl.setWindow(
+      moment().subtract(1, 'month').toDate(),
+      moment().add(2, 'months').toDate(),
+      { animation: false },
+    )
 
     // vis-timeline only builds its drag tooltip (the date readout shown while
     // an item's start/end is dragged) for *selected* items. With
@@ -215,20 +288,26 @@ export function LiveTimeline({
     }
   }, [])
 
+  // Toggle drag affordances when editing turns on/off. Keyed on the boolean,
+  // not the `onItemEdit` callback identity — the callback's identity changes
+  // whenever its deps (e.g. column metadata) do, and re-running the full
+  // itemsDs.update() on every such change is needless churn. onMove always
+  // reads the latest callback via onItemEditRef.
+  const editingEnabled = Boolean(onItemEdit)
   useEffect(() => {
     const tl = timelineRef.current
     if (!tl) return
     tl.setOptions({
       editable: {
-        updateTime: Boolean(onItemEdit),
-        updateGroup: false,
+        updateTime: editingEnabled,
+        updateGroup: editingEnabled,
         add: false,
         remove: false,
       },
     })
     const itemsDs = itemsDsRef.current
     if (itemsDs) itemsDs.update(itemsDs.get())
-  }, [onItemEdit])
+  }, [editingEnabled])
 
   useEffect(() => {
     const itemsDs = itemsDsRef.current

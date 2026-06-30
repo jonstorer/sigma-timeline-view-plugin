@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import {
+  applyLaneMove,
   buildItemsAndGroups,
   buildPathsForRow,
   parseGroupCell,
+  parseGroupId,
   pathToGroupId,
   safeId,
 } from './buildItems'
@@ -497,6 +499,90 @@ describe('pathToGroupId', () => {
 
   test('escapes pipes in segments', () => {
     expect(pathToGroupId(['a|b', 'c'], 1)).toBe('a\\|b|c')
+  })
+})
+
+describe('parseGroupId', () => {
+  test('splits a pipe-joined group id into ordered segments', () => {
+    expect(parseGroupId('NA|Team Alpha|Alice')).toEqual([
+      'NA',
+      'Team Alpha',
+      'Alice',
+    ])
+  })
+
+  test('a single segment with no pipe is one value', () => {
+    expect(parseGroupId('Alice')).toEqual(['Alice'])
+  })
+
+  test('unescapes \\| inside a segment (does not split on it)', () => {
+    expect(parseGroupId('a\\|b|c')).toEqual(['a|b', 'c'])
+  })
+
+  test('round-trips with pathToGroupId for a full path', () => {
+    const path = ['NA', 'Team|X', 'Alice']
+    const id = pathToGroupId(path, path.length - 1)
+    expect(parseGroupId(id)).toEqual(path)
+  })
+})
+
+describe('applyLaneMove', () => {
+  test('single column, single value → swaps to the new lane', () => {
+    expect(applyLaneMove([['Alice']], ['Alice'], ['Carol'])).toEqual([
+      ['Carol'],
+    ])
+  })
+
+  test('single column, multi-value → swaps the dragged value, preserves the rest', () => {
+    expect(applyLaneMove([['Alice', 'Bob']], ['Alice'], ['Carol'])).toEqual([
+      ['Carol', 'Bob'],
+    ])
+  })
+
+  test('unchanged column (old === new) is returned as-is', () => {
+    expect(applyLaneMove([['Alice', 'Bob']], ['Alice'], ['Alice'])).toEqual([
+      ['Alice', 'Bob'],
+    ])
+  })
+
+  test('dropping onto a lane the row already occupies dedupes (merge)', () => {
+    expect(applyLaneMove([['Alice', 'Bob']], ['Alice'], ['Bob'])).toEqual([
+      ['Bob'],
+    ])
+  })
+
+  test('multi-level: each column swaps independently, preserving other lanes', () => {
+    // Team [Alpha, Beta] × Person [Alice]; drag Alpha|Alice → Gamma|Alice.
+    expect(
+      applyLaneMove(
+        [
+          ['Alpha', 'Beta'],
+          ['Alice'],
+        ],
+        ['Alpha', 'Alice'],
+        ['Gamma', 'Alice'],
+      ),
+    ).toEqual([
+      ['Gamma', 'Beta'],
+      ['Alice'],
+    ])
+  })
+
+  test('a level missing from the dropped path leaves that column unchanged', () => {
+    // Dropped on a parent lane → only the parent level is in newPath.
+    expect(
+      applyLaneMove(
+        [
+          ['Alpha'],
+          ['Alice', 'Bob'],
+        ],
+        ['Alpha', 'Alice'],
+        ['Beta'],
+      ),
+    ).toEqual([
+      ['Beta'],
+      ['Alice', 'Bob'],
+    ])
   })
 })
 

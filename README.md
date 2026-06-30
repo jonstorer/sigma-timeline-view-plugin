@@ -26,9 +26,13 @@ and exposes its config slots in Sigma's editor panel.
   one item per value, each in its own swimlane. With multiple group columns
   and several multi-value cells on the same row, the values are paired by
   index, not cartesian-producted — see [Multi-level grouping](#multi-level-grouping).
-- Drag an item horizontally to change its start/end; the new times round-
-  trip to the source row via the Sigma Action API as a single JSON payload.
-  Lane reassignment and double-click-to-create are not yet wired.
+- Drag an item horizontally to change its start/end, or onto another swimlane
+  to reassign its lane; the new times **and** lane round-trip to the source row
+  via the Sigma Action API as a single JSON payload **keyed by your source
+  column names** — the id, start, and end columns, plus each **Group by**
+  column. The edit action writes each field straight back to its column.
+  Double-click-to-create is not yet wired. See
+  [Lane reassignment](#lane-reassignment) for details.
 - Select an item to fire a Sigma Action with the row's pass-through columns as a
   JSON payload — e.g. to populate a detail form for the record with no
   per-column lookups, since the values ride along in the payload.
@@ -59,23 +63,50 @@ plugin writes a JSON payload to the text variable and fires the action.
 
 | Slot | Type | Purpose |
 |---|---|---|
-| `editPayloadVariable` | variable (text) | Receives `{"id": <rowId>, "startDate": "<ISO>", "endDate": "<ISO>"}`. |
+| `editPayloadVariable` | variable (text) | Receives a JSON object **keyed by your source column names**: the id column → `<rowId>`, start/end columns → `"<ISO>"`, and each **Group by** column → an array of that column's values for the row. |
 | `editAction` | action-trigger | Fires after the variable is set. |
 
 `idColumn` must also be configured — without it the plugin has no row id
 to round-trip and drag stays disabled.
 
-Sigma-side, parse the payload with `JsonExtract` and feed the extracted
-fields into your update action. Example formulas:
+The payload keys are the **column names** (labels) from the source element, so
+the edit action maps each field directly back to its column. For example, with
+an id column `ID`, dates `Start`/`End`, and a Group-by column `Assignees`:
+
+```json
+{ "ID": "r1", "Start": "<ISO>", "End": "<ISO>", "Assignees": ["Carol", "Bob"] }
+```
+
+Sigma-side, parse with `JsonExtract` (substitute your own column names):
 
 ```
-JsonExtract([editPayload], "id")
-DateParse(JsonExtract([editPayload], "startDate"))
-DateParse(JsonExtract([editPayload], "endDate"))
+JsonExtract([editPayload], "ID")
+DateParse(JsonExtract([editPayload], "Start"))
+DateParse(JsonExtract([editPayload], "End"))
+JsonExtract([editPayload], "Assignees")   // JSON array of the column's new values
 ```
 
-Drag-between-lanes (group reassignment) and double-click-to-create (new
-items) are not wired in this build.
+#### Lane reassignment
+
+Drag an item onto a different swimlane to reassign it — handled by the same edit
+payload/action. Group-by columns are treated **independently** (no enforced
+parent→child hierarchy), so each Group-by column key carries the row's **full
+value set for that column after the move**: the dragged lane's old value is
+swapped for the new one and the row's other memberships are preserved. This is
+what makes a one-row-many-lanes move work without collapsing the row.
+
+- **Multi-value rows.** A row whose Group-by cell holds several values shows up
+  in several lanes at once. Dragging one instance to a new lane swaps just that
+  value (e.g. `["Alice","Bob"]` → `["Carol","Bob"]`); the others stay put.
+- **Dropping on a parent lane.** With nested groups you can drop onto a parent
+  (non-leaf) row; columns below that level keep their current values.
+- **Merge on collision.** Dropping onto a lane the row already occupies dedupes
+  that column's values (the two instances merge).
+- Lane drag turns on together with start/end editing (same `editAction`). If the
+  action doesn't write the Group-by columns, the item snaps back to its original
+  lane on the next data refresh.
+
+Double-click-to-create (new items) is not wired in this build.
 
 ### Select an item (optional)
 

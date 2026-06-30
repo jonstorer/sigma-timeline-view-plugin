@@ -16,6 +16,7 @@ vi.mock('vis-timeline/esnext', async () => {
       setGroups: vi.fn(),
       setOptions: vi.fn(),
       on: vi.fn(),
+      setWindow: vi.fn(),
       getEventProperties: vi.fn(() => ({ item: undefined })),
       setSelection: vi.fn(),
     })),
@@ -29,10 +30,10 @@ import { snapToDay, formatDragTooltip } from './dragHelpers'
 import { SOURCE } from './editorPanel'
 
 type CapturedOptions = {
-  editable: { updateTime: boolean }
+  editable: { updateTime: boolean; updateGroup: boolean }
   itemsAlwaysDraggable: { item: boolean; range: boolean }
   onMove: (
-    item: { id: unknown; start: Date; end: Date | null },
+    item: { id: unknown; start: Date; end: Date | null; group?: unknown },
     callback: (item: unknown) => void,
   ) => void
 }
@@ -48,6 +49,7 @@ const lastTimelineInstance = () =>
     setOptions: ReturnType<typeof vi.fn>
     setGroups: ReturnType<typeof vi.fn>
     on: ReturnType<typeof vi.fn>
+    setWindow: ReturnType<typeof vi.fn>
     getEventProperties: ReturnType<typeof vi.fn>
     setSelection: ReturnType<typeof vi.fn>
   }
@@ -213,6 +215,8 @@ describe('LiveTimeline drag editing', () => {
       />,
     )
     expect(lastTimelineOptions().editable.updateTime).toBe(true)
+    // Lane reassignment rides on the same edit handler.
+    expect(lastTimelineOptions().editable.updateGroup).toBe(true)
   })
 
   test('makes items always draggable so the whole item moves on a body drag (not just edge resize)', () => {
@@ -277,10 +281,59 @@ describe('LiveTimeline drag editing', () => {
     }
     lastTimelineOptions().onMove(moved, callback)
 
+    // Payload is keyed by the source column ids (the same keys the data arrived
+    // under), not synthetic names. Ungrouped → no group keys.
     expect(onItemEdit).toHaveBeenCalledWith({
-      id: 'r1',
-      startDate: '2026-05-02T00:00:00.000Z',
-      endDate: '2026-05-09T00:00:00.000Z',
+      id_col: 'r1',
+      start_col: '2026-05-02T00:00:00.000Z',
+      end_col: '2026-05-09T00:00:00.000Z',
+    })
+    expect(callback).toHaveBeenCalledWith(moved)
+  })
+
+  test('onMove reassigns a lane and emits the full updated value set for the group column', () => {
+    const onItemEdit = vi.fn()
+    // r1 is multi-valued on the group column, so it occupies two lanes at once.
+    const groupedConfig = {
+      [SOURCE]: 'element-1',
+      startDate: 'start_col',
+      endDate: 'end_col',
+      label: 'label_col',
+      idColumn: 'id_col',
+      group: 'assignee_col',
+    }
+    const groupedData = {
+      start_col: ['2026-05-01'],
+      end_col: ['2026-05-08'],
+      label_col: ['T'],
+      id_col: ['r1'],
+      assignee_col: [['Alice', 'Bob']],
+    }
+    render(
+      <LiveTimeline
+        config={groupedConfig}
+        data={groupedData}
+        onItemEdit={onItemEdit}
+      />,
+    )
+
+    const callback = vi.fn()
+    // Drag the Alice instance (item id "r1|Alice") onto the Carol lane.
+    const moved = {
+      id: 'r1|Alice',
+      start: new Date('2026-05-02T00:00:00.000Z'),
+      end: new Date('2026-05-09T00:00:00.000Z'),
+      group: 'Carol',
+    }
+    lastTimelineOptions().onMove(moved, callback)
+
+    // The group column key carries the row's full membership after the move:
+    // Alice → Carol, Bob preserved (the other lane the row still occupies).
+    expect(onItemEdit).toHaveBeenCalledWith({
+      id_col: 'r1',
+      start_col: '2026-05-02T00:00:00.000Z',
+      end_col: '2026-05-09T00:00:00.000Z',
+      assignee_col: ['Carol', 'Bob'],
     })
     expect(callback).toHaveBeenCalledWith(moved)
   })
@@ -356,6 +409,23 @@ describe('LiveTimeline drag editing', () => {
       .dispatchEvent(new Event('pointerdown', { bubbles: true }))
 
     expect(instance.setSelection).not.toHaveBeenCalled()
+  })
+
+  test('opens to a ~3-month window via setWindow (not start/end options)', () => {
+    // start/end options gate vis-timeline's initial reveal on a rangechanged
+    // event that is unreliable in the Sigma iframe, so the opening window is set
+    // imperatively with setWindow instead — which still reveals the chart.
+    render(<LiveTimeline config={oneRowConfig} data={oneRowData} />)
+    const opts = lastTimelineOptions() as unknown as Record<string, unknown>
+    expect(opts.start).toBeUndefined()
+    expect(opts.end).toBeUndefined()
+
+    const setWindow = lastTimelineInstance().setWindow
+    expect(setWindow).toHaveBeenCalledTimes(1)
+    const [start, end] = setWindow.mock.calls[0] as [Date, Date]
+    const spanDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    expect(spanDays).toBeGreaterThan(80) // ~3 months (now−1mo … now+2mo)
+    expect(spanDays).toBeLessThan(100)
   })
 
   test('switches the Timeline to ungrouped mode with setGroups(undefined) when no group columns', () => {
