@@ -41,6 +41,12 @@ export interface BuildResult {
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>
+  /** Ordered group-column ids (the `data` keys), top → bottom of hierarchy. */
+  groupColumns: string[]
+  /** Each item's group path (its value in each group column) for write-back. */
+  originalPathByItemId: Map<string, GroupPath>
+  /** Per row, the current value set of each group column (aligned to groupColumns). */
+  groupValuesByRowId: Map<string, GroupValue[][]>
   errors: string[]
 }
 

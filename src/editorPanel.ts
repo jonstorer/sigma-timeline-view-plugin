@@ -85,7 +85,8 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'editPayloadVariable',
     type: 'variable',
-    label: 'Edit payload variable (text, holds JSON: {id,startDate,endDate})',
+    label:
+      'Edit payload variable (text; JSON keyed by your source column names: id, start, end, and each Group-by column)',
     allowedTypes: ['text'],
   },
 

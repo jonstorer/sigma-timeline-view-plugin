@@ -11,6 +11,7 @@ vi.mock('@sigmacomputing/plugin', () => ({
   useEditorPanelConfig: vi.fn(),
   useConfig: vi.fn(() => ({})),
   useElementData: vi.fn(() => ({})),
+  useElementColumns: vi.fn(() => ({})),
   useVariable: vi.fn(() => [undefined, vi.fn()]),
   useActionTrigger: vi.fn(() => vi.fn()),
 }))

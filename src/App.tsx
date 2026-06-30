@@ -2,10 +2,12 @@ import { useCallback } from 'react'
 import {
   useConfig,
   useEditorPanelConfig,
+  useElementColumns,
   useElementData,
 } from '@sigmacomputing/plugin'
 import { editorPanelConfig, SOURCE } from './editorPanel'
 import { LiveTimeline, type ItemEditPayload } from './LiveTimeline'
+import { withColumnLabels } from './editPayload'
 import { useTriggerWithValue } from './useTriggerWithValue'
 import type { TimelineConfig } from './types'
 import './App.css'
@@ -19,8 +21,14 @@ function App() {
   // treat undefined/'' as "unconfigured" (no-op). Default to '' so a partial
   // config stays type-clean without changing behavior.
   const data = useElementData(config?.[SOURCE] ?? '')
+  // Column metadata for the source element — used to label the edit payload's
+  // keys with the human column names instead of opaque column ids.
+  const columns = useElementColumns(config?.[SOURCE] ?? '')
 
-  // Drag-edit: write the {id,startDate,endDate} payload, then fire the edit action.
+  // Drag-edit: relabel the payload keys (source column id → human name) and
+  // write it, then fire the edit action. Keys are the id, start, end, and each
+  // Group-by column; the Group-by keys carry the row's new lane membership
+  // after a between-swimlane drag.
   const fireEdit = useTriggerWithValue(
     config?.editPayloadVariable ?? '',
     config?.editAction ?? '',
@@ -44,9 +52,9 @@ function App() {
 
   const onItemEdit = useCallback(
     (payload: ItemEditPayload) => {
-      fireEdit(JSON.stringify(payload))
+      fireEdit(JSON.stringify(withColumnLabels(payload, columns)))
     },
-    [fireEdit],
+    [fireEdit, columns],
   )
 
   const onItemSelect = useCallback(

@@ -2,6 +2,7 @@ import type { DataGroup, DataItem } from 'vis-timeline/esnext'
 import type {
   BuildResult,
   GroupPath,
+  GroupValue,
   ItemVisual,
   ParsedGroupCell,
   TimelineConfig,
@@ -54,6 +55,65 @@ export function pathToGroupId(path: GroupPath, level: number): string {
     .join('|')
 }
 
+/**
+ * Inverse of `pathToGroupId` / `safeId`: split a group id back into its ordered
+ * path segments, honoring the `\|` escaping `safeId` applies. Used to turn the
+ * lane an item was dropped onto back into the per-level group values, which map
+ * positionally to the configured group columns for write-back.
+ */
+export function parseGroupId(id: string): GroupPath {
+  const segments: string[] = []
+  let current = ''
+  for (let i = 0; i < id.length; i++) {
+    const ch = id[i]
+    if (ch === '\\' && id[i + 1] === '|') {
+      current += '|'
+      i++
+    } else if (ch === '|') {
+      segments.push(current)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  segments.push(current)
+  return segments
+}
+
+/**
+ * Recompute each group column's value set for a row after one of its
+ * lane-instances is dragged from `oldPath` to `newPath`. Group columns are
+ * independent (no enforced hierarchy), so each column just swaps its old value
+ * for the new one — the row's other lane memberships are preserved, which is
+ * how a one-row-many-lanes move stays conflict-free. Returns one value array
+ * per column, aligned to `currentByColumn`. A column whose value is unchanged
+ * (or whose level isn't in the dropped path) is returned as-is; a drop onto a
+ * lane the row already occupies dedupes (effectively a merge).
+ */
+export function applyLaneMove(
+  currentByColumn: GroupValue[][],
+  oldPath: GroupPath,
+  newPath: GroupPath,
+): GroupValue[][] {
+  return currentByColumn.map((values, col) => {
+    const from = oldPath[col]
+    const to = newPath[col]
+    if (to == null || from === to) return [...values]
+    const next: GroupValue[] = []
+    let replaced = false
+    for (const v of values) {
+      if (!replaced && v === from) {
+        next.push(to)
+        replaced = true
+      } else {
+        next.push(v)
+      }
+    }
+    if (!replaced) next.push(to)
+    return next.filter((v, idx) => next.indexOf(v) === idx)
+  })
+}
+
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -89,11 +149,22 @@ export function buildItemsAndGroups(
 ): BuildResult {
   const visuals = new Map<string, ItemVisual>()
   const rowIdByItemId = new Map<string, unknown>()
+  const originalPathByItemId = new Map<string, GroupPath>()
+  const groupValuesByRowId = new Map<string, GroupValue[][]>()
   const errors: string[] = []
 
-  if (!config || !data) {
-    return { items: [], groups: [], visuals, rowIdByItemId, errors }
-  }
+  const empty = (): BuildResult => ({
+    items: [],
+    groups: [],
+    visuals,
+    rowIdByItemId,
+    groupColumns: [],
+    originalPathByItemId,
+    groupValuesByRowId,
+    errors,
+  })
+
+  if (!config || !data) return empty()
 
   const startCol = config.startDate
   const endCol = config.endDate
@@ -105,9 +176,7 @@ export function buildItemsAndGroups(
   const descCol = config.descriptionColumn
 
   const groupCols = normalizeGroupCols(config.group)
-  if (!startCol || !endCol) {
-    return { items: [], groups: [], visuals, rowIdByItemId, errors }
-  }
+  if (!startCol || !endCol) return empty()
   const ungrouped = groupCols.length === 0
 
   const starts = data[startCol] ?? []
@@ -185,11 +254,17 @@ export function buildItemsAndGroups(
     const parsed = groupColumnData.map((col) => parseGroupCell(col[i]))
     const paths = buildPathsForRow(parsed)
     if (paths.length === 0) continue
+    groupValuesByRowId.set(
+      String(rowId),
+      parsed.map((p) => p.values),
+    )
 
     for (const path of paths) {
       registerPath(path)
       const leafGroupId = pathToGroupId(path, path.length - 1)
-      pushItem(`${safeId(rowId)}|${leafGroupId}`, leafGroupId)
+      const itemId = `${safeId(rowId)}|${leafGroupId}`
+      originalPathByItemId.set(itemId, path)
+      pushItem(itemId, leafGroupId)
     }
   }
 
@@ -215,5 +290,14 @@ export function buildItemsAndGroups(
     return String(a.content).localeCompare(String(b.content))
   })
 
-  return { items, groups, visuals, rowIdByItemId, errors }
+  return {
+    items,
+    groups,
+    visuals,
+    rowIdByItemId,
+    groupColumns: groupCols,
+    originalPathByItemId,
+    groupValuesByRowId,
+    errors,
+  }
 }
