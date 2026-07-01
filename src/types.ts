@@ -15,6 +15,7 @@ export interface TimelineConfig {
   startDate?: string
   endDate?: string
   highlightColorColumn?: string
+  progressColumn?: string
   pillLabelColumn?: string
   pillColorColumn?: string
   descriptionColumn?: string

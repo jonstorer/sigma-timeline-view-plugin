@@ -58,6 +58,15 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'progressColumn',
+    type: 'column',
+    label: 'Progress column (0–1 fraction, fills the bar, optional)',
+    source: SOURCE,
+    allowedTypes: ['number', 'integer'],
+    allowMultiple: false,
+  },
+
+  {
     name: 'pillLabelColumn',
     type: 'column',
     label: 'Pill label column (left side text, optional)',
