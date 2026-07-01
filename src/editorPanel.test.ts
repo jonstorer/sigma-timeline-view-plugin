@@ -54,6 +54,14 @@ describe('editorPanelConfig', () => {
     expect(byName.pillColorColumn).toMatchObject({ source: SOURCE })
   })
 
+  test('progress column sources from SOURCE and accepts numeric columns', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.progressColumn).toMatchObject({
+      source: SOURCE,
+      allowedTypes: ['number', 'integer'],
+    })
+  })
+
   test('edit slots are present: text variable + action trigger', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
     expect(byName.editPayloadVariable).toMatchObject({

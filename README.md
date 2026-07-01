@@ -37,7 +37,8 @@ and exposes its config slots in Sigma's editor panel.
   JSON payload — e.g. to populate a detail form for the record with no
   per-column lookups, since the values ride along in the payload.
 - Optional per-row highlight color (a source column holding a `#hex`) shown as
-  a left-edge bar on the item, and an optional text pill that can carry its own
+  a left-edge bar on the item, an optional 0–1 **progress** column that fills the
+  bar to show percent complete, and an optional text pill that can carry its own
   per-row color — all read straight from source columns (no separate legend
   table or status lookup).
 - Visible-window range (start + end) is pushed to workbook variables on every
@@ -142,6 +143,7 @@ slot at it.
 | Slot | Type | Purpose |
 |---|---|---|
 | `highlightColorColumn` | column (text) | Per-row `#hex` — drives the left-edge highlight bar on the item. Blank rows render un-highlighted. |
+| `progressColumn` | column (number) | Per-row **0–1 fraction** — fills the left portion of the bar to show percent complete (0.6 → 60% filled). The fill is a translucent tint of the highlight color (neutral blue when none). Blank/0/non-numeric → no fill. |
 | `pillLabelColumn` | column | Text shown as a Bootstrap-style pill on the left of the item. |
 | `pillColorColumn` | column (text) | Per-row `#hex` filling the pill background (falls back to the default grey when blank). |
 | `descriptionColumn` | column | Shown in the hover card when the item is hovered. |

@@ -114,6 +114,46 @@ export function applyLaneMove(
   })
 }
 
+/**
+ * Parse a progress cell into a 0–1 fraction, or null when absent/non-numeric.
+ * Values are clamped to [0, 1] (the configured column is a 0–1 fraction).
+ */
+export function parseProgress(raw: unknown): number | null {
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  if (Number.isNaN(n)) return null
+  return Math.min(1, Math.max(0, n))
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return null
+  let h = m[1]
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  }
+}
+
+/**
+ * Inline `background-image` that fills the left `fraction` of the item bar. The
+ * fill is a translucent tint of the item's highlight color so the label stays
+ * readable; rows without a (parseable) highlight color get a neutral blue tint.
+ */
+export function progressBackground(
+  fraction: number,
+  highlightColor: string,
+): string {
+  const rgb = hexToRgb(highlightColor)
+  const fill = rgb
+    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`
+    : 'rgba(59, 130, 246, 0.2)'
+  const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100)
+  return `linear-gradient(to right, ${fill} 0, ${fill} ${pct}%, transparent ${pct}%)`
+}
+
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -171,6 +211,7 @@ export function buildItemsAndGroups(
   const labelCol = config.label
   const idCol = config.idColumn
   const highlightCol = config.highlightColorColumn
+  const progressCol = config.progressColumn
   const pillCol = config.pillLabelColumn
   const pillColorCol = config.pillColorColumn
   const descCol = config.descriptionColumn
@@ -185,6 +226,7 @@ export function buildItemsAndGroups(
   const groupColumnData = groupCols.map((col) => data[col] ?? [])
   const ids = idCol ? (data[idCol] ?? []) : []
   const highlights = highlightCol ? (data[highlightCol] ?? []) : []
+  const progresses = progressCol ? (data[progressCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
   const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
   const descriptions = descCol ? (data[descCol] ?? []) : []
@@ -219,9 +261,17 @@ export function buildItemsAndGroups(
     const label = labelCol ? String(labels[i] ?? '') : ''
 
     const highlightColor = highlightCol ? String(highlights[i] ?? '').trim() : ''
-    const style = highlightColor
-      ? `box-shadow: inset 6px 0 0 ${highlightColor};`
-      : undefined
+    const progress = progressCol ? parseProgress(progresses[i]) : null
+    const styleParts: string[] = []
+    if (highlightColor) {
+      styleParts.push(`box-shadow: inset 6px 0 0 ${highlightColor};`)
+    }
+    if (progress != null && progress > 0) {
+      styleParts.push(
+        `background-image: ${progressBackground(progress, highlightColor)};`,
+      )
+    }
+    const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const description = descCol ? String(descriptions[i] ?? '').trim() : ''
