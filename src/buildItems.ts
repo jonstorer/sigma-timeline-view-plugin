@@ -32,15 +32,9 @@ export function parseGroupCell(raw: unknown): ParsedGroupCell {
       }
     }
   }
-  if (s.includes(',')) {
-    return {
-      values: s
-        .split(',')
-        .map((v) => v.trim())
-        .filter((v) => v !== ''),
-      wasMulti: true,
-    }
-  }
+  // A plain string is one value, even if it contains commas — splitting on
+  // commas is ambiguous (e.g. "Research, Plan, & Execute" is one group, not
+  // three). Genuine multi-value cells arrive as an array or JSON array above.
   return { values: [s], wasMulti: false }
 }
 

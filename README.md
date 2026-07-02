@@ -22,8 +22,10 @@ and exposes its config slots in Sigma's editor panel.
   Pick multiple columns to build a nested hierarchy (e.g. Region → Team →
   Assignee) — vis-timeline renders each parent level as a collapsible header
   above its children.
-- Multi-value group cells (JSON array, comma list, or Sigma variant) produce
-  one item per value, each in its own swimlane. With multiple group columns
+- Multi-value group cells (an array or JSON-array string) produce one item per
+  value, each in its own swimlane. A plain string is always one group, even if
+  it contains commas (e.g. "Research, Plan, & Execute" stays a single lane).
+  With multiple group columns
   and several multi-value cells on the same row, the values are paired by
   index, not cartesian-producted — see [Multi-level grouping](#multi-level-grouping).
 - Drag an item horizontally to change its start/end, or onto another swimlane
@@ -154,9 +156,9 @@ The **Group by** slot accepts an ordered list of columns. The first column is
 the top of the hierarchy; the last is the leaf swimlane where items actually
 sit.
 
-Multi-value cells (a row whose group cell holds an array / JSON list / comma
-list) are fanned out as the **cartesian product** of every level — the item
-shows up in every combination of values:
+Multi-value cells (a row whose group cell holds an array or JSON-array string)
+are fanned out as the **cartesian product** of every level — the item shows up
+in every combination of values:
 
 - All single-valued cells on a row → one path through the hierarchy → the
   item appears once.
