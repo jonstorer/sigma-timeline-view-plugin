@@ -118,6 +118,13 @@
   font-weight: 600;
   font-size: 13px;
   color: #111827;
+  /* Wrap long swimlane labels instead of letting the left rail grow to fit
+     them on one line. max-width caps the rail; normal wrapping breaks at
+     spaces first, and overflow-wrap only splits a word when it alone is too
+     long to fit. The lane grows vertically to fit the wrapped text. */
+  max-width: 200px;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .timeline-host .vis-panel.vis-left {
   border-right: 1px solid #e5e7eb;

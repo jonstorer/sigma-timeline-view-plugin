@@ -96,10 +96,16 @@ describe('parseGroupCell', () => {
     })
   })
 
-  test('comma-separated string is split and multi', () => {
+  test('a plain string with commas stays a single value (not split)', () => {
+    // Comma-splitting is ambiguous, so a plain string is always one group even
+    // when it contains commas — genuine multi-value arrives as an array.
+    expect(parseGroupCell('Research, Plan, & Execute')).toEqual({
+      values: ['Research, Plan, & Execute'],
+      wasMulti: false,
+    })
     expect(parseGroupCell('Alice, Bob, Carol')).toEqual({
-      values: ['Alice', 'Bob', 'Carol'],
-      wasMulti: true,
+      values: ['Alice, Bob, Carol'],
+      wasMulti: false,
     })
   })
 
@@ -110,18 +116,12 @@ describe('parseGroupCell', () => {
     })
   })
 
-  test('comma list filters empty entries', () => {
-    expect(parseGroupCell('Alice,,Bob,')).toEqual({
-      values: ['Alice', 'Bob'],
-      wasMulti: true,
-    })
-  })
-
-  test('malformed JSON-array string falls back to comma split', () => {
-    // String looks like JSON but doesn't parse — should still split on comma.
+  test('a malformed JSON-array string is kept as a single value', () => {
+    // Looks like JSON but doesn't parse → treated as a plain (single) value,
+    // not split on the comma.
     expect(parseGroupCell('[Alice, Bob')).toEqual({
-      values: ['[Alice', 'Bob'],
-      wasMulti: true,
+      values: ['[Alice, Bob'],
+      wasMulti: false,
     })
   })
 
