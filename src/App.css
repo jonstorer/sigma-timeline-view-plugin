@@ -234,6 +234,13 @@
   padding: 4px 10px 4px 12px;
   line-height: 18px;
 }
+/* When the item carries a link, let its content span the full bar width so the
+   link right-aligns to the item's right edge — otherwise vis sizes the content
+   to the label and the link only reaches the end of the text. */
+.timeline-host .vis-item.vis-range .vis-item-content:has(.ts-item-link) {
+  width: 100%;
+  box-sizing: border-box;
+}
 .timeline-host .vis-item.vis-range .vis-item-overflow {
   overflow: hidden;
 }
@@ -273,6 +280,31 @@
   white-space: nowrap;
   min-width: 0;
   font-weight: 500;
+}
+
+/* Optional link anchored at the item's right edge. Only when a link is present
+   does the wrapper stretch full-width so `margin-left: auto` can push the link
+   to the far right; without it, the wrapper stays content-sized as before. */
+.ts-item-wrapper:has(.ts-item-link) {
+  display: flex;
+  width: 100%;
+}
+.ts-item-link {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: #2563eb;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+}
+.ts-item-link:hover {
+  background: rgba(37, 99, 235, 0.12);
 }
 
 /* ---- Item hover card ---------------------------------------------- */

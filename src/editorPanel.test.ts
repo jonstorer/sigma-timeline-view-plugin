@@ -62,6 +62,11 @@ describe('editorPanelConfig', () => {
     })
   })
 
+  test('link column sources from SOURCE', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.linkColumn).toMatchObject({ source: SOURCE })
+  })
+
   test('edit slots are present: text variable + action trigger', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
     expect(byName.editPayloadVariable).toMatchObject({

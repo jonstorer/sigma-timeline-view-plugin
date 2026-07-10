@@ -208,6 +208,7 @@ export function buildItemsAndGroups(
   const progressCol = config.progressColumn
   const pillCol = config.pillLabelColumn
   const pillColorCol = config.pillColorColumn
+  const linkCol = config.linkColumn
   const descCol = config.descriptionColumn
 
   const groupCols = normalizeGroupCols(config.group)
@@ -223,6 +224,7 @@ export function buildItemsAndGroups(
   const progresses = progressCol ? (data[progressCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
   const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
+  const links = linkCol ? (data[linkCol] ?? []) : []
   const descriptions = descCol ? (data[descCol] ?? []) : []
 
   const rowCount = starts.length
@@ -268,13 +270,15 @@ export function buildItemsAndGroups(
     const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
+    const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''
     const description = descCol ? String(descriptions[i] ?? '').trim() : ''
 
     const pushItem = (itemId: string, group?: string) => {
-      if (pill || pillColor || description) {
+      if (pill || pillColor || linkUrl || description) {
         visuals.set(itemId, {
           ...(pill ? { pill } : {}),
           ...(pillColor ? { pillColor } : {}),
+          ...(linkUrl ? { linkUrl } : {}),
           ...(description ? { description } : {}),
         })
       }

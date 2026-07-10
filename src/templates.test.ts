@@ -78,6 +78,31 @@ describe('renderItemContent', () => {
     }
   })
 
+  test('renders a link anchored last when linkUrl is set, opening in a new tab', () => {
+    const visuals = new Map<string, ItemVisual>([
+      ['x', { linkUrl: 'https://example.com/r/1' }],
+    ])
+    const out = renderItemContent(makeItem('x', 'Task'), visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    if (out instanceof HTMLElement) {
+      const link = out.querySelector<HTMLAnchorElement>('a.ts-item-link')
+      expect(link).not.toBeNull()
+      expect(link!.getAttribute('href')).toBe('https://example.com/r/1')
+      expect(link!.target).toBe('_blank')
+      expect(link!.rel).toContain('noopener')
+      // Anchored at the end, after the text.
+      expect(out.lastElementChild).toBe(link)
+    }
+  })
+
+  test('no link is rendered when linkUrl is absent', () => {
+    const visuals = new Map<string, ItemVisual>([['x', { pill: 'P1' }]])
+    const out = renderItemContent(makeItem('x', 'Task'), visuals)
+    if (out instanceof HTMLElement) {
+      expect(out.querySelector('.ts-item-link')).toBeNull()
+    }
+  })
+
   test('pill text is set via textContent, preventing HTML injection', () => {
     const visuals = new Map<string, ItemVisual>([
       ['x', { pill: '<script>alert(1)</script>' }],
