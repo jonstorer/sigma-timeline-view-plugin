@@ -112,9 +112,19 @@ export function LiveTimeline({
     const options: TimelineOptions = {
       stack: true,
       orientation: 'top',
-      // No `start`/`end` here — the opening window is set with setWindow after
-      // construction (see below). Passing them as options would gate the chart's
-      // initial reveal on an unreliable rangechanged event in the Sigma iframe.
+      // No `start`/`end` options: with them, vis-timeline gates its initial
+      // reveal on a `rangechanged` event that doesn't fire reliably in the Sigma
+      // iframe (leaving the chart blank). Without them, vis auto-fits the window
+      // to the data on first draw — so we set our fixed opening window in
+      // onInitialDrawComplete below, which runs *after* that auto-fit and wins.
+      onInitialDrawComplete: () => {
+        // Default zoom: a 3-month window, one month back and two forward.
+        timelineRef.current?.setWindow(
+          moment().subtract(1, 'month').toDate(),
+          moment().add(2, 'months').toDate(),
+          { animation: false },
+        )
+      },
       zoomMin: 28 * DAY_MS,
       zoomMax: 730 * DAY_MS,
       zoomable: false,
@@ -133,6 +143,11 @@ export function LiveTimeline({
         axis: 24,
       },
       verticalScroll: true,
+      // Cap the timeline to its container so vertical scrolling actually engages
+      // — without a maxHeight, vis-timeline grows to fit every lane and nothing
+      // scrolls internally, so the whole chart (time axis included) scrolls away
+      // instead of the axis staying pinned while the lanes scroll under it.
+      maxHeight: '100%',
       editable: {
         updateTime: Boolean(onItemEditRef.current),
         // Lane reassignment: dragging an item onto another swimlane writes the
@@ -198,18 +213,6 @@ export function LiveTimeline({
 
     const tl = new Timeline(container, itemsDs, groupsDs, options)
     timelineRef.current = tl
-
-    // Opening zoom: a 3-month window (one month back, two forward). Set via
-    // setWindow rather than the `start`/`end` options on purpose — those options
-    // gate vis-timeline's initial reveal on a `rangechanged` event that doesn't
-    // fire reliably inside the Sigma iframe, which leaves the whole chart
-    // positioned but stuck at visibility:hidden. Omitting them keeps the reveal
-    // unconditional; setWindow still gives us the exact starting window.
-    tl.setWindow(
-      moment().subtract(1, 'month').toDate(),
-      moment().add(2, 'months').toDate(),
-      { animation: false },
-    )
 
     // vis-timeline only builds its drag tooltip (the date readout shown while
     // an item's start/end is dragged) for *selected* items. With

@@ -84,6 +84,14 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'linkColumn',
+    type: 'column',
+    label: 'Link URL column (opens in a new tab from the right of the item, optional)',
+    source: SOURCE,
+    allowMultiple: false,
+  },
+
+  {
     name: 'descriptionColumn',
     type: 'column',
     label: 'Hover description column (shown on item hover, optional)',

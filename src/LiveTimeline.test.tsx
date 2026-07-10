@@ -411,16 +411,24 @@ describe('LiveTimeline drag editing', () => {
     expect(instance.setSelection).not.toHaveBeenCalled()
   })
 
-  test('opens to a ~3-month window via setWindow (not start/end options)', () => {
-    // start/end options gate vis-timeline's initial reveal on a rangechanged
-    // event that is unreliable in the Sigma iframe, so the opening window is set
-    // imperatively with setWindow instead — which still reveals the chart.
+  test('opens to a ~3-month window via onInitialDrawComplete (not start/end options)', () => {
+    // No start/end options (they gate vis's reveal on an unreliable rangechanged
+    // event in the Sigma iframe). Without them vis auto-fits to the data on first
+    // draw, so the fixed 3-month window is applied in onInitialDrawComplete —
+    // which fires AFTER that auto-fit, so it wins.
     render(<LiveTimeline config={oneRowConfig} data={oneRowData} />)
     const opts = lastTimelineOptions() as unknown as Record<string, unknown>
     expect(opts.start).toBeUndefined()
     expect(opts.end).toBeUndefined()
 
+    // Not applied at construction (vis would override it with the auto-fit).
     const setWindow = lastTimelineInstance().setWindow
+    expect(setWindow).not.toHaveBeenCalled()
+
+    // vis calls onInitialDrawComplete once the initial draw + auto-fit are done.
+    expect(typeof opts.onInitialDrawComplete).toBe('function')
+    ;(opts.onInitialDrawComplete as () => void)()
+
     expect(setWindow).toHaveBeenCalledTimes(1)
     const [start, end] = setWindow.mock.calls[0] as [Date, Date]
     const spanDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)

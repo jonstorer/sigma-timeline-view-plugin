@@ -414,6 +414,26 @@ describe('buildItemsAndGroups', () => {
     expect(result.items[0].style).toBeUndefined()
   })
 
+  test('link column populates linkUrl only for rows that have a url', () => {
+    const data = {
+      start_col: ['2026-05-01', '2026-05-01'],
+      end_col: ['2026-05-08', '2026-05-08'],
+      group_col: ['Alice', 'Bob'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+      link_col: ['https://example.com/r/1', ''],
+    }
+    const result = buildItemsAndGroups(
+      { ...baseConfig, linkColumn: 'link_col' },
+      data,
+    )
+    expect(result.visuals.get('r1|Alice')).toEqual({
+      linkUrl: 'https://example.com/r/1',
+    })
+    // Blank url → no visual at all for that row.
+    expect(result.visuals.has('r2|Bob')).toBe(false)
+  })
+
   test('highlight and pill colors are independent — both can appear on one item', () => {
     const data = {
       start_col: ['2026-05-01'],

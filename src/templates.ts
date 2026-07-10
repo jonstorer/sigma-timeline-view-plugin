@@ -22,5 +22,21 @@ export function renderItemContent(
   textEl.className = 'ts-item-text'
   textEl.textContent = text
   wrapper.appendChild(textEl)
+  if (visual.linkUrl) {
+    const link = document.createElement('a')
+    link.className = 'ts-item-link'
+    link.href = visual.linkUrl
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.title = 'Open link in a new tab'
+    link.textContent = '↗'
+    // Stop the pointer/click from reaching vis-timeline so the anchor opens
+    // instead of starting an item drag or firing the select action; the
+    // anchor's own default click still navigates (in a new tab).
+    for (const type of ['pointerdown', 'mousedown', 'click']) {
+      link.addEventListener(type, (e) => e.stopPropagation())
+    }
+    wrapper.appendChild(link)
+  }
   return wrapper
 }

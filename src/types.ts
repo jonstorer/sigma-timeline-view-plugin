@@ -18,6 +18,7 @@ export interface TimelineConfig {
   progressColumn?: string
   pillLabelColumn?: string
   pillColorColumn?: string
+  linkColumn?: string
   descriptionColumn?: string
   editPayloadVariable?: string
   editAction?: string
@@ -33,6 +34,8 @@ export interface ItemVisual {
   pill?: string
   /** #hex from the pill color column; fills the pill background. */
   pillColor?: string
+  /** URL from the link column; renders a link anchored at the item's right. */
+  linkUrl?: string
   /** Raw value of the configured description column, shown on item hover. */
   description?: string
 }
