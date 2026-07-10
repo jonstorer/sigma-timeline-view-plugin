@@ -109,13 +109,14 @@
 
 /* Group rail (left). Labels are vertically centered in each lane — vis-timeline
    otherwise top-anchors `.vis-inner`, leaving names clinging to the top of tall
-   lanes with dead space below. Leaf lanes are clean white rows with a hairline
-   divider. */
+   lanes with dead space below. The whole rail/body is filled with the workbook
+   grey (#F3F3F3) so the plugin blends into the surrounding Sigma workbook, with
+   a hairline divider between lanes; white item bars pop against the grey. */
 .timeline-host .vis-labelset .vis-label {
   display: flex;
   align-items: center;
-  background: #fff;
-  border-bottom: 1px solid #f3f4f6;
+  background: #f3f3f3;
+  border-bottom: 1px solid #e6e6e6;
   min-height: 64px;
 }
 .timeline-host .vis-labelset .vis-label .vis-inner {
@@ -143,22 +144,23 @@
   border: none;
 }
 
-/* Swimlane body — match the leaf rail (white, hairline divider). */
+/* Swimlane body — match the leaf rail (workbook grey, hairline divider). */
 .timeline-host .vis-foreground .vis-group {
-  background-color: #fff;
-  border-bottom: 1px solid #f3f4f6;
+  background-color: #f3f3f3;
+  border-bottom: 1px solid #e6e6e6;
   min-height: 64px;
 }
 
 /* Parent header rows (groups with nestedGroups). `ts-parent-group` is set on
    BOTH the label and the foreground body so their heights + background match
-   (vis only applies its own `.vis-nesting-group` to the label side). A clean
-   white header with a sentence-case bold name — not a cramped uppercase bar. */
+   (vis only applies its own `.vis-nesting-group` to the label side). The
+   grouping bar is a slightly darker grey than the lanes so it reads as a header
+   without breaking the all-grey field; sentence-case bold name. */
 .timeline-host .vis-labelset .vis-label.ts-parent-group,
 .timeline-host .vis-foreground .vis-group.ts-parent-group {
   min-height: 40px;
-  background: #fff;
-  border-bottom: 1px solid #eef0f3;
+  background: #e6e6e6;
+  border-bottom: 1px solid #dadada;
 }
 .timeline-host .vis-labelset .vis-label.ts-parent-group {
   cursor: pointer;
@@ -194,7 +196,7 @@
   top: 0;
   bottom: 0;
   width: 1.5px;
-  background: #e5e7eb;
+  background: #cbd5e1;
 }
 .timeline-host .vis-labelset .vis-label.vis-nested-group:not(.ts-parent-group)::after {
   content: '';
@@ -203,7 +205,7 @@
   top: 50%;
   width: 10px;
   height: 1.5px;
-  background: #e5e7eb;
+  background: #cbd5e1;
 }
 
 /* Deeper nesting indents each additional parent level so 3+ level trees still
