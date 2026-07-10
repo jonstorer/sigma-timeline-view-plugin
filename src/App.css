@@ -107,17 +107,22 @@
   border-bottom: 1px solid #eef0f3;
 }
 
-/* Group rail (left) — leaf swimlane labels */
+/* Group rail (left). Labels are vertically centered in each lane — vis-timeline
+   otherwise top-anchors `.vis-inner`, leaving names clinging to the top of tall
+   lanes with dead space below. Leaf lanes are clean white rows with a hairline
+   divider. */
 .timeline-host .vis-labelset .vis-label {
-  border-bottom: 6px solid #fff;
-  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #f3f4f6;
   min-height: 64px;
 }
 .timeline-host .vis-labelset .vis-label .vis-inner {
   padding: 10px 12px;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 13px;
-  color: #111827;
+  color: #374151;
   /* Wrap long swimlane labels instead of letting the left rail grow to fit
      them on one line. max-width caps the rail; normal wrapping breaks at
      spaces first, and overflow-wrap only splits a word when it alone is too
@@ -130,55 +135,84 @@
   border-right: 1px solid #e5e7eb;
 }
 
-/* Swimlane body — match the left rail. Border-bottom is white so the
-   underlying timeline-root background reads as a gap between lanes. */
+/* vis-timeline ships a leftover debug rule in its stylesheet —
+   `.vis-group-level-unknown-but-gte1 { border: 1px solid red }` — which it
+   stamps onto nested group bodies, painting a red 1px border around every
+   sub-lane. Neutralize it. */
+.timeline-host .vis-group-level-unknown-but-gte1 {
+  border: none;
+}
+
+/* Swimlane body — match the leaf rail (white, hairline divider). */
 .timeline-host .vis-foreground .vis-group {
-  background-color: #f3f4f6;
-  border-bottom: 6px solid #fff;
+  background-color: #fff;
+  border-bottom: 1px solid #f3f4f6;
   min-height: 64px;
 }
 
-/* Parent header rows (groups with nestedGroups). We attach a `ts-parent-group`
-   className to the DataGroup so it lands on BOTH the label and the foreground
-   body — vis-timeline only applies its built-in `.vis-nesting-group` class to
-   the label side, and the body would otherwise stay at the 64px leaf height.
-   vis-timeline also renders an expand/collapse chevron (▼/▶) on the label via
-   `:before` from `.vis-nesting-group` — kept and restyled below. */
+/* Parent header rows (groups with nestedGroups). `ts-parent-group` is set on
+   BOTH the label and the foreground body so their heights + background match
+   (vis only applies its own `.vis-nesting-group` to the label side). A clean
+   white header with a sentence-case bold name — not a cramped uppercase bar. */
 .timeline-host .vis-labelset .vis-label.ts-parent-group,
 .timeline-host .vis-foreground .vis-group.ts-parent-group {
-  min-height: 28px;
-  background: #e5e7eb;
-  border-bottom: 1px solid #d1d5db;
+  min-height: 40px;
+  background: #fff;
+  border-bottom: 1px solid #eef0f3;
 }
 .timeline-host .vis-labelset .vis-label.ts-parent-group {
   cursor: pointer;
 }
 .timeline-host .vis-labelset .vis-label.ts-parent-group .vis-inner {
-  padding: 6px 12px;
-  font-size: 10px;
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #374151;
-}
-/* The chevron — sized + colored so it sits inline with the label. */
-.timeline-host .vis-labelset .vis-label.vis-nesting-group:before {
-  font-size: 9px;
-  color: #6b7280;
-  margin-right: 4px;
+  color: #111827;
 }
 
-/* Indent nested labels by depth. vis-timeline ships indent rules but they
-   target `.vis-nested-group` only (not the parent header itself). Override
-   here so parents also indent, keeping the visual hierarchy aligned. */
-.timeline-host .vis-labelset .vis-label.vis-group-level-1 .vis-inner {
-  padding-left: 24px;
+/* Hide vis-timeline's disclosure triangle (the ▶/▼ expand/collapse caret it
+   auto-adds to nested groups). Collapsing still works by clicking the row. */
+.timeline-host .vis-labelset .vis-label.vis-nesting-group:before {
+  display: none;
 }
-.timeline-host .vis-labelset .vis-label.vis-group-level-2 .vis-inner {
-  padding-left: 40px;
+
+/* Leaf lanes nested under a parent get a tree spine + elbow connecting them to
+   the group. Drawn on the full-height row and bounded to it (top:0/bottom:0),
+   so the guide stays within the children and never cuts into the parent header
+   above. `vis-nested-group` is vis's own class for nested children;
+   `:not(.ts-parent-group)` excludes mid-tier parents (also nested). */
+.timeline-host .vis-labelset .vis-label.vis-nested-group:not(.ts-parent-group) {
+  position: relative;
 }
-.timeline-host .vis-labelset .vis-label.vis-group-level-3 .vis-inner {
-  padding-left: 56px;
+.timeline-host .vis-labelset .vis-label.vis-nested-group:not(.ts-parent-group) .vis-inner {
+  padding-left: 30px;
+}
+.timeline-host .vis-labelset .vis-label.vis-nested-group:not(.ts-parent-group)::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: #e5e7eb;
+}
+.timeline-host .vis-labelset .vis-label.vis-nested-group:not(.ts-parent-group)::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 10px;
+  height: 1.5px;
+  background: #e5e7eb;
+}
+
+/* Deeper nesting indents each additional parent level so 3+ level trees still
+   read hierarchically (the guide sits at the first nested level). */
+.timeline-host .vis-labelset .vis-label.ts-parent-group.vis-group-level-1 .vis-inner {
+  padding-left: 28px;
+}
+.timeline-host .vis-labelset .vis-label.ts-parent-group.vis-group-level-2 .vis-inner {
+  padding-left: 44px;
 }
 
 /* Reset default range item look */
