@@ -16,7 +16,9 @@ vi.mock('vis-timeline/esnext', async () => {
       setGroups: vi.fn(),
       setOptions: vi.fn(),
       on: vi.fn(),
+      off: vi.fn(),
       setWindow: vi.fn(),
+      getWindow: vi.fn(() => ({ start: new Date(2026, 5, 1), end: new Date(2026, 6, 1) })),
       getEventProperties: vi.fn(() => ({ item: undefined })),
       setSelection: vi.fn(),
     })),
@@ -49,7 +51,9 @@ const lastTimelineInstance = () =>
     setOptions: ReturnType<typeof vi.fn>
     setGroups: ReturnType<typeof vi.fn>
     on: ReturnType<typeof vi.fn>
+    off: ReturnType<typeof vi.fn>
     setWindow: ReturnType<typeof vi.fn>
+    getWindow: ReturnType<typeof vi.fn>
     getEventProperties: ReturnType<typeof vi.fn>
     setSelection: ReturnType<typeof vi.fn>
   }

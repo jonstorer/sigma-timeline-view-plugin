@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { DataSet } from 'vis-data'
 import {
   Timeline,
@@ -13,6 +13,7 @@ import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import { snapToDay, formatDragTooltip } from './dragHelpers'
+import { weekendBackgroundItems, WEEKEND_MAX_SPAN_DAYS } from './weekends'
 import type { ItemVisual, TimelineConfig } from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
@@ -49,6 +50,7 @@ export function LiveTimeline({
   const rowIdByItemIdRef = useRef<Map<string, unknown>>(new Map())
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
+  const weekendIdsRef = useRef<string[]>([])
   // The current config (for the source column ids the edit payload is keyed by)
   // and the group write-back context, read inside the once-wired onMove handler.
   const configRef = useRef(config)
@@ -312,12 +314,43 @@ export function LiveTimeline({
     if (itemsDs) itemsDs.update(itemsDs.get())
   }, [editingEnabled])
 
+  // Shade weekends across the visible window (plus a window-span buffer each
+  // side). Regenerated on pan/zoom via `rangechanged` and after data reloads.
+  // Skipped when zoomed out past WEEKEND_MAX_SPAN_DAYS, where per-week bands
+  // would just be noise.
+  const syncWeekends = useCallback(() => {
+    const tl = timelineRef.current
+    const ds = itemsDsRef.current
+    if (!tl || !ds) return
+    if (weekendIdsRef.current.length > 0) {
+      ds.remove(weekendIdsRef.current)
+      weekendIdsRef.current = []
+    }
+    const win = tl.getWindow()
+    const span = win.end.getTime() - win.start.getTime()
+    if (span / DAY_MS > WEEKEND_MAX_SPAN_DAYS) return
+    const wk = weekendBackgroundItems(
+      new Date(win.start.getTime() - span),
+      new Date(win.end.getTime() + span),
+    )
+    ds.add(wk as DataItem[])
+    weekendIdsRef.current = wk.map((w) => String((w as { id: unknown }).id))
+  }, [])
+
+  useEffect(() => {
+    const tl = timelineRef.current
+    if (!tl) return
+    tl.on('rangechanged', syncWeekends)
+    return () => tl.off('rangechanged', syncWeekends)
+  }, [syncWeekends])
+
   useEffect(() => {
     const itemsDs = itemsDsRef.current
     const groupsDs = groupsDsRef.current
     const tl = timelineRef.current
     if (!itemsDs || !groupsDs || !tl) return
     itemsDs.clear()
+    weekendIdsRef.current = []
     groupsDs.clear()
     if (groups.length > 0) {
       groupsDs.add(groups)
@@ -326,7 +359,8 @@ export function LiveTimeline({
       tl.setGroups(undefined)
     }
     itemsDs.add(items)
-  }, [items, groups])
+    syncWeekends()
+  }, [items, groups, syncWeekends])
 
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.startDate || !config?.endDate

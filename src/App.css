@@ -144,11 +144,30 @@
   border: none;
 }
 
-/* Swimlane body — match the leaf rail (workbook grey, hairline divider). */
+/* Swimlane body is transparent so the weekend background bands show through;
+   the grey comes from the center panel below instead. (Parent headers keep
+   their own opaque grey via `.ts-parent-group`.) */
 .timeline-host .vis-foreground .vis-group {
-  background-color: #f3f3f3;
+  background-color: transparent;
   border-bottom: 1px solid #e6e6e6;
   min-height: 64px;
+}
+/* Grey backdrop for the timeline body: weekday lanes read grey, and weekend
+   bands render over this, behind the item bars. */
+.timeline-host .vis-panel.vis-center {
+  background: #f3f3f3;
+}
+
+/* Weekend shading — a two-tone band per weekend (Saturday = lighter left half,
+   Sunday = darker right half; the split falls at the 2-day band's midpoint).
+   Bands are `type:'background'` items generated for the visible window. */
+.timeline-host .vis-item.vis-background.ts-weekend {
+  background-color: transparent;
+  background-image: linear-gradient(
+    to right,
+    rgba(15, 23, 42, 0.03) 0 50%,
+    rgba(15, 23, 42, 0.08) 50% 100%
+  );
 }
 
 /* Parent header rows (groups with nestedGroups). `ts-parent-group` is set on
