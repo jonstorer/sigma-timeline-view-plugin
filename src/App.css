@@ -234,13 +234,6 @@
   padding: 4px 10px 4px 12px;
   line-height: 18px;
 }
-/* When the item carries a link, let its content span the full bar width so the
-   link right-aligns to the item's right edge — otherwise vis sizes the content
-   to the label and the link only reaches the end of the text. */
-.timeline-host .vis-item.vis-range .vis-item-content:has(.ts-item-link) {
-  width: 100%;
-  box-sizing: border-box;
-}
 .timeline-host .vis-item.vis-range .vis-item-overflow {
   overflow: hidden;
 }
@@ -256,16 +249,16 @@
 .ts-item-wrapper {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   min-width: 0;
   max-width: 100%;
 }
 
 .ts-pill {
   display: inline-block;
-  padding: 1px 7px;
+  padding: 0 6px;
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   line-height: 14px;
   color: #fff;
@@ -279,27 +272,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  margin-left: 2px;
   font-weight: 500;
 }
 
-/* Optional link anchored at the item's right edge. Only when a link is present
-   does the wrapper stretch full-width so `margin-left: auto` can push the link
-   to the far right; without it, the wrapper stays content-sized as before. */
-.ts-item-wrapper:has(.ts-item-link) {
-  display: flex;
-  width: 100%;
-}
+/* Optional external-doc link, rendered first (left of the pill) as a compact,
+   subtle glyph — quick context that stays visible as a wide item scrolls,
+   without taking much space. */
 .ts-item-link {
-  margin-left: auto;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 4px;
   color: #2563eb;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   text-decoration: none;
 }
