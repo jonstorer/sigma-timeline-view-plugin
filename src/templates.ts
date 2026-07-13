@@ -11,17 +11,8 @@ export function renderItemContent(
   if (!visual) return text
   const wrapper = document.createElement('span')
   wrapper.className = 'ts-item-wrapper'
-  if (visual.pill) {
-    const pillEl = document.createElement('span')
-    pillEl.className = 'ts-pill'
-    pillEl.textContent = visual.pill
-    if (visual.pillColor) pillEl.style.backgroundColor = visual.pillColor
-    wrapper.appendChild(pillEl)
-  }
-  const textEl = document.createElement('span')
-  textEl.className = 'ts-item-text'
-  textEl.textContent = text
-  wrapper.appendChild(textEl)
+  // Link first (before the pill), left-anchored: it rides the content vis keeps
+  // visible, so it stays on screen even when a wide item scrolls past the edge.
   if (visual.linkUrl) {
     const link = document.createElement('a')
     link.className = 'ts-item-link'
@@ -38,5 +29,16 @@ export function renderItemContent(
     }
     wrapper.appendChild(link)
   }
+  if (visual.pill) {
+    const pillEl = document.createElement('span')
+    pillEl.className = 'ts-pill'
+    pillEl.textContent = visual.pill
+    if (visual.pillColor) pillEl.style.backgroundColor = visual.pillColor
+    wrapper.appendChild(pillEl)
+  }
+  const textEl = document.createElement('span')
+  textEl.className = 'ts-item-text'
+  textEl.textContent = text
+  wrapper.appendChild(textEl)
   return wrapper
 }

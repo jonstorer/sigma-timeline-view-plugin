@@ -148,7 +148,7 @@ slot at it.
 | `progressColumn` | column (number) | Per-row **0–1 fraction** — fills the left portion of the bar to show percent complete (0.6 → 60% filled). The fill is a translucent tint of the highlight color (neutral blue when none). Blank/0/non-numeric → no fill. |
 | `pillLabelColumn` | column | Text shown as a Bootstrap-style pill on the left of the item. |
 | `pillColorColumn` | column (text) | Per-row `#hex` filling the pill background (falls back to the default grey when blank). |
-| `linkColumn` | column (url/text) | Per-row URL. When present, a small link icon is anchored at the item's right edge that opens the URL in a new tab. Rows with a blank value show no link. |
+| `linkColumn` | column (url/text) | Per-row URL. When present, a small link glyph sits at the left of the item (before the pill) and opens the URL in a new tab. Left-anchored so it stays visible as a wide item scrolls. Rows with a blank value show no link. |
 | `descriptionColumn` | column | Shown in the hover card when the item is hovered. |
 
 ### Multi-level grouping

@@ -78,9 +78,9 @@ describe('renderItemContent', () => {
     }
   })
 
-  test('renders a link anchored last when linkUrl is set, opening in a new tab', () => {
+  test('renders a link first (left of the pill) when linkUrl is set, opening in a new tab', () => {
     const visuals = new Map<string, ItemVisual>([
-      ['x', { linkUrl: 'https://example.com/r/1' }],
+      ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
     ])
     const out = renderItemContent(makeItem('x', 'Task'), visuals)
     expect(out).toBeInstanceOf(HTMLElement)
@@ -90,8 +90,8 @@ describe('renderItemContent', () => {
       expect(link!.getAttribute('href')).toBe('https://example.com/r/1')
       expect(link!.target).toBe('_blank')
       expect(link!.rel).toContain('noopener')
-      // Anchored at the end, after the text.
-      expect(out.lastElementChild).toBe(link)
+      // Left-anchored: first child, before the pill.
+      expect(out.firstElementChild).toBe(link)
     }
   })
 
