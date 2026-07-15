@@ -242,18 +242,34 @@
   padding-left: 44px;
 }
 
-/* Reset default range item look */
+/* Item bars — "soft card" look: white, rounded, a soft drop shadow, and the
+   data highlight color as a slim inset left bar. `--item-color` (and, for items
+   with a progress value, `--progress` + the `has-progress` class) are set in
+   buildItems.ts. */
 .timeline-host .vis-item.vis-range {
   background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: none;
+  border-radius: 10px;
   color: #1f2937;
   min-height: 26px;
-  /* inline style adds inset shadow for status color when applicable */
+  box-shadow:
+    inset 4px 0 0 var(--item-color, #6b7280),
+    0 2px 6px rgba(15, 23, 42, 0.14);
+}
+/* Progress fill: the left `--progress` of the bar takes a tint of the highlight
+   color, the rest stays white (100% fills the whole bar). */
+.timeline-host .vis-item.vis-range.has-progress {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff) var(--progress, 0%),
+    #fff var(--progress, 0%)
+  );
 }
 .timeline-host .vis-item.vis-range.vis-selected {
-  border-color: #93c5fd;
-  background: #ffffff;
+  box-shadow:
+    inset 4px 0 0 var(--item-color, #6b7280),
+    0 0 0 2px #93c5fd,
+    0 2px 6px rgba(15, 23, 42, 0.14);
 }
 .timeline-host .vis-item.vis-range .vis-item-content {
   padding: 4px 10px 4px 12px;
