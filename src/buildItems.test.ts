@@ -7,7 +7,6 @@ import {
   parseGroupId,
   parseProgress,
   pathToGroupId,
-  progressBackground,
   safeId,
 } from './buildItems'
 
@@ -277,7 +276,7 @@ describe('buildItemsAndGroups', () => {
     expect(result.items).toHaveLength(1)
   })
 
-  test('highlight color column drives the inline box-shadow style (no visual on its own)', () => {
+  test('highlight color column drives the --item-color custom property (no visual on its own)', () => {
     const data = {
       start_col: ['2026-05-01'],
       end_col: ['2026-05-08'],
@@ -290,9 +289,11 @@ describe('buildItemsAndGroups', () => {
       { ...baseConfig, highlightColorColumn: 'color_col' },
       data,
     )
-    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
-    // The bar lives in the item style, not the visuals map — a row with only a
-    // highlight color has nothing to render inside the item.
+    expect(result.items[0].style).toBe('--item-color: #22c55e;')
+    // No progress → no `has-progress` class, so the bar stays solid.
+    expect(result.items[0].className).toBeUndefined()
+    // The color lives in the item style, not the visuals map — a row with only
+    // a highlight color has nothing to render inside the item.
     expect(result.visuals.has('r1|Alice')).toBe(false)
   })
 
@@ -313,7 +314,7 @@ describe('buildItemsAndGroups', () => {
     expect(result.visuals.has('r1|Alice')).toBe(false)
   })
 
-  test('progress column fills the bar via a background-image gradient', () => {
+  test('progress column sets --progress and the has-progress class', () => {
     const data = {
       start_col: ['2026-05-01'],
       end_col: ['2026-05-08'],
@@ -326,10 +327,10 @@ describe('buildItemsAndGroups', () => {
       { ...baseConfig, progressColumn: 'progress_col' },
       data,
     )
-    // No highlight → neutral tint, filled to 60%.
-    expect(result.items[0].style).toBe(
-      'background-image: linear-gradient(to right, rgba(59, 130, 246, 0.2) 0, rgba(59, 130, 246, 0.2) 60%, transparent 60%);',
-    )
+    // No highlight → only the progress custom property; the fill itself is
+    // applied in CSS (a tint of the color, up to --progress).
+    expect(result.items[0].style).toBe('--progress: 60%;')
+    expect(result.items[0].className).toBe('has-progress')
   })
 
   test('progress fill tints with the highlight color and combines with the bar', () => {
@@ -350,10 +351,8 @@ describe('buildItemsAndGroups', () => {
       },
       data,
     )
-    expect(result.items[0].style).toBe(
-      'box-shadow: inset 6px 0 0 #22c55e; ' +
-        'background-image: linear-gradient(to right, rgba(34, 197, 94, 0.28) 0, rgba(34, 197, 94, 0.28) 25%, transparent 25%);',
-    )
+    expect(result.items[0].style).toBe('--item-color: #22c55e; --progress: 25%;')
+    expect(result.items[0].className).toBe('has-progress')
   })
 
   test('zero / blank / non-numeric progress adds no fill', () => {
@@ -454,7 +453,7 @@ describe('buildItemsAndGroups', () => {
       },
       data,
     )
-    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
+    expect(result.items[0].style).toBe('--item-color: #22c55e;')
     expect(result.visuals.get('r1|Alice')).toEqual({
       pill: 'HIGH',
       pillColor: '#ef4444',
@@ -543,7 +542,7 @@ describe('buildItemsAndGroups', () => {
       },
       data,
     )
-    expect(result.items[0].style).toBe('box-shadow: inset 6px 0 0 #22c55e;')
+    expect(result.items[0].style).toBe('--item-color: #22c55e;')
     expect(result.visuals.has('r1')).toBe(false)
   })
 
@@ -685,33 +684,6 @@ describe('parseProgress', () => {
     expect(parseProgress(undefined)).toBeNull()
     expect(parseProgress('')).toBeNull()
     expect(parseProgress('n/a')).toBeNull()
-  })
-})
-
-describe('progressBackground', () => {
-  test('tints with the highlight color (6-digit hex → rgba at 0.28)', () => {
-    expect(progressBackground(0.6, '#22c55e')).toBe(
-      'linear-gradient(to right, rgba(34, 197, 94, 0.28) 0, rgba(34, 197, 94, 0.28) 60%, transparent 60%)',
-    )
-  })
-
-  test('expands 3-digit hex', () => {
-    expect(progressBackground(0.5, '#08f')).toBe(
-      'linear-gradient(to right, rgba(0, 136, 255, 0.28) 0, rgba(0, 136, 255, 0.28) 50%, transparent 50%)',
-    )
-  })
-
-  test('falls back to a neutral tint when the color is missing/unparseable', () => {
-    expect(progressBackground(0.4, '')).toBe(
-      'linear-gradient(to right, rgba(59, 130, 246, 0.2) 0, rgba(59, 130, 246, 0.2) 40%, transparent 40%)',
-    )
-    expect(progressBackground(0.4, 'not-a-color')).toContain(
-      'rgba(59, 130, 246, 0.2)',
-    )
-  })
-
-  test('rounds the fill percentage', () => {
-    expect(progressBackground(0.333, '#000000')).toContain('33%')
   })
 })
 

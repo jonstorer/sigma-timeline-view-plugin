@@ -119,35 +119,6 @@ export function parseProgress(raw: unknown): number | null {
   return Math.min(1, Math.max(0, n))
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return null
-  let h = m[1]
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16),
-  }
-}
-
-/**
- * Inline `background-image` that fills the left `fraction` of the item bar. The
- * fill is a translucent tint of the item's highlight color so the label stays
- * readable; rows without a (parseable) highlight color get a neutral blue tint.
- */
-export function progressBackground(
-  fraction: number,
-  highlightColor: string,
-): string {
-  const rgb = hexToRgb(highlightColor)
-  const fill = rgb
-    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`
-    : 'rgba(59, 130, 246, 0.2)'
-  const pct = Math.round(Math.min(1, Math.max(0, fraction)) * 100)
-  return `linear-gradient(to right, ${fill} 0, ${fill} ${pct}%, transparent ${pct}%)`
-}
-
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -258,16 +229,16 @@ export function buildItemsAndGroups(
 
     const highlightColor = highlightCol ? String(highlights[i] ?? '').trim() : ''
     const progress = progressCol ? parseProgress(progresses[i]) : null
+    // The item look is CSS-driven (see App.css). Hand the highlight color and
+    // progress to the stylesheet as custom properties; `has-progress` gates the
+    // progress fill so bars without a value stay solid.
     const styleParts: string[] = []
-    if (highlightColor) {
-      styleParts.push(`box-shadow: inset 6px 0 0 ${highlightColor};`)
-    }
-    if (progress != null && progress > 0) {
-      styleParts.push(
-        `background-image: ${progressBackground(progress, highlightColor)};`,
-      )
-    }
+    if (highlightColor) styleParts.push(`--item-color: ${highlightColor};`)
+    const pct =
+      progress != null && progress > 0 ? Math.round(progress * 100) : null
+    if (pct != null) styleParts.push(`--progress: ${pct}%;`)
     const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
+    const className = pct != null ? 'has-progress' : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''
@@ -291,6 +262,7 @@ export function buildItemsAndGroups(
         end: rawEnd as DataItem['end'],
         type: 'range',
         ...(style ? { style } : {}),
+        ...(className ? { className } : {}),
       })
     }
 
