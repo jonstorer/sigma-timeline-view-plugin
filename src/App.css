@@ -119,9 +119,20 @@
   /* Lane divider: an inset "groove" line — darker slate than a hairline so it
      reads clearly over the weekend shading, which washed out the old border. */
   box-shadow: inset 0 -1px 0 #94a3b8;
-  min-height: 64px;
 }
 .timeline-host .vis-labelset .vis-label .vis-inner {
+  /* The lane's min height lives HERE, not on `.vis-label` / `.vis-group`. vis
+     derives each group's height from the label inner's clientHeight (plus the
+     items) and then sizes the whole row to that. A min-height on the outer
+     elements would floor the *rendered* row above vis's own height model, so
+     its vertical-scroll range came up short and the bottom lanes couldn't be
+     reached. Keeping it on the inner (with border-box) means vis measures the
+     real row height; centering keeps the label vertically centered now that the
+     inner fills the row. */
+  min-height: 64px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
   padding: 10px 12px;
   font-weight: 500;
   font-size: 13px;
@@ -152,9 +163,10 @@
 .timeline-host .vis-foreground .vis-group {
   background-color: transparent;
   /* Lane divider: an inset "groove" line — darker slate than a hairline so it
-     reads clearly over the weekend shading, which washed out the old border. */
+     reads clearly over the weekend shading, which washed out the old border.
+     No min-height here: vis sizes the row to its computed group height (see the
+     note on `.vis-inner`), so flooring it in CSS would break vertical scroll. */
   box-shadow: inset 0 -1px 0 #94a3b8;
-  min-height: 64px;
 }
 /* Grey backdrop for the timeline body: weekday lanes read grey, and weekend
    bands render over this, behind the item bars. */
@@ -181,7 +193,6 @@
    without breaking the all-grey field; sentence-case bold name. */
 .timeline-host .vis-labelset .vis-label.ts-parent-group,
 .timeline-host .vis-foreground .vis-group.ts-parent-group {
-  min-height: 40px;
   background: #e6e6e6;
   border-bottom: 1px solid #dadada;
   /* Not the leaf groove — headers keep their own hairline. */
@@ -191,6 +202,12 @@
   cursor: pointer;
 }
 .timeline-host .vis-labelset .vis-label.ts-parent-group .vis-inner {
+  /* Header row height lives on the inner too (see the leaf `.vis-inner` note),
+     overriding the leaf 64px so headers stay compact. */
+  min-height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
   padding: 0 12px;
   font-size: 13px;
   font-weight: 700;
