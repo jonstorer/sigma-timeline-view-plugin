@@ -12,8 +12,13 @@ import moment from 'moment'
 import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
-import { snapToDay, formatDragTooltip } from './dragHelpers'
+import { formatDragTooltip } from './dragHelpers'
 import { weekendBackgroundItems, WEEKEND_MAX_SPAN_DAYS } from './weekends'
+import {
+  displayEndToDataEnd,
+  formatSigmaDateTime,
+  snapDisplaySpan,
+} from './weekSpan'
 import type { ItemVisual, TimelineConfig } from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
@@ -164,6 +169,23 @@ export function LiveTimeline({
       // to the Range pan and scrolls the timeline instead of moving the item.
       // Making items always draggable lets the body drag claim the gesture.
       itemsAlwaysDraggable: { item: true, range: true },
+      // Week granularity is decided entirely in onMoving/onMove (below), on the
+      // full-fidelity pointer position — `snap` only ever sees a bare
+      // timestamp with no indication of which edge is moving, so it can't
+      // apply the Monday/Friday-specific rule. Pre-rounding here would also
+      // shift the nearest-week thresholds onMoving relies on.
+      snap: null,
+      // Live-drag snapping: keeps the bar visually on Mon->Sat weeks while the
+      // user drags, independent of which edge (or the whole item) is moving.
+      // Weekend background bands and end-less items pass through untouched.
+      onMoving: (item, callback) => {
+        if (item.type === 'background' || item.end == null) {
+          callback(item)
+          return
+        }
+        const span = snapDisplaySpan(item.start, item.end)
+        callback(span ? { ...item, start: span.start, end: span.end } : item)
+      },
       onMove: (item, callback) => {
         const handler = onItemEditRef.current
         const itemId = String(item.id)
@@ -176,12 +198,19 @@ export function LiveTimeline({
           callback(null)
           return
         }
+        // Re-snap rather than trust onMoving's last frame: a drop can arrive
+        // with no preceding panmove. Snapping is a fixed point, so re-running
+        // it on an already-snapped span is a no-op.
+        const span = item.end != null ? snapDisplaySpan(item.start, item.end) : null
         // Key the payload by the source column ids (the same keys the data
-        // arrived under) so the edit action maps each field back to its column.
+        // arrived under) so the edit action maps each field back to its
+        // column. The end is converted from the DISPLAY Saturday back to the
+        // DATA Friday, and formatted with no T/Z/millis — Sigma's Date()
+        // parses "YYYY-MM-DD HH:MM:SS" natively but not ISO 8601.
         const payload: ItemEditPayload = {
           [idCol]: rowId,
-          [startCol]: new Date(item.start as Date).toISOString(),
-          [endCol]: item.end ? new Date(item.end as Date).toISOString() : null,
+          [startCol]: span ? formatSigmaDateTime(span.start) : null,
+          [endCol]: span ? formatSigmaDateTime(displayEndToDataEnd(span.end)) : null,
         }
         // Lane reassignment: item.group is the lane the item was dropped onto.
         // Treat each group column independently and emit its full value set for
@@ -199,10 +228,9 @@ export function LiveTimeline({
           })
         }
         handler(payload)
-        callback(item)
+        callback(span ? { ...item, start: span.start, end: span.end } : item)
       },
       moment: (date: moment.MomentInput) => moment(date),
-      snap: (date) => snapToDay(date),
       tooltipOnItemUpdateTime: {
         template: (item: { start?: unknown; end?: unknown }) =>
           formatDragTooltip(item),

@@ -10,5 +10,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Pinned to a negative UTC offset so week-snapping's date-boundary math
+    // (src/weekSpan.ts) is actually exercised: on a UTC CI runner, the
+    // UTC-midnight-renders-as-previous-local-day bug this module fixes can't
+    // reproduce at all.
+    env: { TZ: 'America/Los_Angeles' },
   },
 })

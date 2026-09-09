@@ -1,4 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
+import { displaySpanFromCells } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -220,9 +221,12 @@ export function buildItemsAndGroups(
   }
 
   for (let i = 0; i < rowCount; i++) {
-    const rawStart = starts[i]
-    const rawEnd = ends[i]
-    if (rawStart == null || rawEnd == null) continue
+    // Normalize to a whole Mon->Sat display week on every read, not just on
+    // drag — so a source cell that's off by a day (or mid-week) still renders
+    // as a clean block instead of the stray value it actually holds. Rows
+    // whose dates don't parse at all are skipped, same as the old null-guard.
+    const span = displaySpanFromCells(starts[i], ends[i])
+    if (!span) continue
 
     const rowId = idCol ? ids[i] : `__row_${i}`
     const label = labelCol ? String(labels[i] ?? '') : ''
@@ -258,8 +262,8 @@ export function buildItemsAndGroups(
         id: itemId,
         ...(group ? { group } : {}),
         content: label,
-        start: rawStart as DataItem['start'],
-        end: rawEnd as DataItem['end'],
+        start: span.start,
+        end: span.end,
         type: 'range',
         ...(style ? { style } : {}),
         ...(className ? { className } : {}),

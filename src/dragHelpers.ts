@@ -1,32 +1,31 @@
 import moment from 'moment'
-
-/**
- * Snap a dragged/resized timestamp to the nearest day boundary, independent of
- * the (weekly) axis scale — vis-timeline's default snap rounds to the displayed
- * scale (weeks here), so this is passed to the documented `snap` option to get
- * day-granular dragging while keeping the weekly axis.
- */
-export function snapToDay(date: Date | number): Date {
-  const m = moment(date)
-  const floor = m.clone().startOf('day')
-  const ceil = floor.clone().add(1, 'day')
-  const t = m.valueOf()
-  return t - floor.valueOf() < ceil.valueOf() - t
-    ? floor.toDate()
-    : ceil.toDate()
-}
+import {
+  displayEndToDataEnd,
+  snapDisplaySpan,
+  toLocalDate,
+  weekStart,
+} from './weekSpan'
 
 /**
  * Tooltip shown while dragging/resizing an item (via the `tooltipOnItemUpdateTime`
- * option), so the user can see the dates they're dropping onto. Shows the live
- * start → end for a range, or just the start when there's no end.
+ * option), so the user can see the dates they're dropping onto.
+ *
+ * `item.end` here is a DISPLAY value (Saturday — see `weekSpan.ts`), one day
+ * past the Friday that will actually be written to Sigma. Convert back before
+ * formatting, or the tooltip shows the user a Saturday they never asked for.
  */
 export function formatDragTooltip(item: {
   start?: unknown
   end?: unknown
 }): string {
-  const fmt = (d: unknown) =>
-    moment(d as moment.MomentInput).format('MMM D, YYYY')
-  const start = item.start != null ? fmt(item.start) : ''
-  return item.end != null ? `${start} → ${fmt(item.end)}` : start
+  const fmt = (d: Date) => moment(d).format('MMM D, YYYY')
+  const start = toLocalDate(item.start)
+  if (!start) return ''
+  if (item.end == null) return fmt(weekStart(start))
+  // Defensive re-snap: by the time this template runs the item has already
+  // gone through onMoving, but re-snapping is a no-op on a fixed point and
+  // keeps the tooltip correct even on a frame this component didn't produce.
+  const span = snapDisplaySpan(item.start, item.end)
+  if (!span) return fmt(weekStart(start))
+  return `${fmt(span.start)} → ${fmt(displayEndToDataEnd(span.end))}`
 }

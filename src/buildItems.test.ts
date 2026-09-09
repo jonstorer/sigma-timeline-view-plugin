@@ -564,6 +564,69 @@ describe('buildItemsAndGroups', () => {
   })
 })
 
+describe('buildItemsAndGroups week snapping', () => {
+  const config = { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' }
+
+  test('a mid-week row renders as Mon of its start week -> Sat of its end week', () => {
+    // Wed May 6 -> Wed May 20, 2026 (two weeks later).
+    const data = {
+      start_col: ['2026-05-06'],
+      end_col: ['2026-05-20'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 4)) // Mon May 4
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 23)) // Sat May 23
+  })
+
+  test('a UTC-midnight epoch start does not slip to the previous local week', () => {
+    const data = {
+      start_col: [Date.UTC(2026, 4, 4)],
+      end_col: [Date.UTC(2026, 4, 8)],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 4))
+  })
+
+  test('end before start is clamped to one week', () => {
+    const data = {
+      start_col: ['2026-05-11'],
+      end_col: ['2026-05-04'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 11))
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 16))
+  })
+
+  test('an unparseable date cell skips the row', () => {
+    const data = {
+      start_col: ['garbage'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items).toHaveLength(0)
+  })
+
+  test('normalization is idempotent: feeding back its own write-back format is a no-op', () => {
+    const first = buildItemsAndGroups(config, {
+      start_col: ['2026-05-06'],
+      end_col: ['2026-05-20'],
+      id_col: ['r1'],
+    })
+    const second = buildItemsAndGroups(config, {
+      // Sigma stores the DATA end (Friday), not the DISPLAY end (Saturday).
+      start_col: ['2026-05-04 00:00:00'],
+      end_col: ['2026-05-22 00:00:00'],
+      id_col: ['r1'],
+    })
+    expect(second.items[0].start).toEqual(first.items[0].start)
+    expect(second.items[0].end).toEqual(first.items[0].end)
+  })
+})
+
 describe('pathToGroupId', () => {
   test('joins path segments with pipe', () => {
     expect(pathToGroupId(['NA', 'Team Alpha', 'Alice'], 2)).toBe(

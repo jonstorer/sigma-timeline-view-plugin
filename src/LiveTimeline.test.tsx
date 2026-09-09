@@ -28,14 +28,30 @@ vi.mock('vis-timeline/esnext', async () => {
 import { DataSet } from 'vis-data'
 import { Timeline } from 'vis-timeline/esnext'
 import { LiveTimeline } from './LiveTimeline'
-import { snapToDay, formatDragTooltip } from './dragHelpers'
 import { SOURCE } from './editorPanel'
 
 type CapturedOptions = {
   editable: { updateTime: boolean; updateGroup: boolean }
   itemsAlwaysDraggable: { item: boolean; range: boolean }
+  snap: unknown
   onMove: (
-    item: { id: unknown; start: Date; end: Date | null; group?: unknown },
+    item: {
+      id: unknown
+      start: Date
+      end: Date | null
+      group?: unknown
+      type?: string
+    },
+    callback: (item: unknown) => void,
+  ) => void
+  onMoving: (
+    item: {
+      id: unknown
+      start: Date
+      end: Date | null
+      group?: unknown
+      type?: string
+    },
     callback: (item: unknown) => void,
   ) => void
 }
@@ -80,41 +96,6 @@ const oneRowData = {
   label_col: ['T'],
   id_col: ['r1'],
 }
-
-describe('snapToDay', () => {
-  // Built and compared in local time so the assertions are timezone-independent.
-  test('snaps a morning time down to the start of that day', () => {
-    const result = snapToDay(new Date(2026, 5, 16, 3, 0))
-    expect(result.getTime()).toBe(new Date(2026, 5, 16, 0, 0, 0, 0).getTime())
-  })
-
-  test('snaps an evening time up to the next day', () => {
-    const result = snapToDay(new Date(2026, 5, 16, 20, 0))
-    expect(result.getTime()).toBe(new Date(2026, 5, 17, 0, 0, 0, 0).getTime())
-  })
-
-  test('leaves a value already at midnight unchanged', () => {
-    const midnight = new Date(2026, 5, 16, 0, 0, 0, 0)
-    expect(snapToDay(midnight).getTime()).toBe(midnight.getTime())
-  })
-})
-
-describe('formatDragTooltip', () => {
-  test('shows start → end for a range', () => {
-    expect(
-      formatDragTooltip({
-        start: new Date(2026, 5, 16),
-        end: new Date(2026, 6, 16),
-      }),
-    ).toBe('Jun 16, 2026 → Jul 16, 2026')
-  })
-
-  test('shows just the start when there is no end', () => {
-    expect(formatDragTooltip({ start: new Date(2026, 5, 16) })).toBe(
-      'Jun 16, 2026',
-    )
-  })
-})
 
 describe('LiveTimeline', () => {
   test('prompts for a data source when none configured', () => {
@@ -267,7 +248,59 @@ describe('LiveTimeline drag editing', () => {
     updateSpy.mockRestore()
   })
 
-  test('onMove maps the dragged item to a payload and accepts the move', () => {
+  test('passes snap: null so week granularity is decided in onMoving/onMove, not snap', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    expect(lastTimelineOptions().snap).toBeNull()
+  })
+
+  test('onMoving snaps a dragged span to whole Monday->Saturday weeks', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    const callback = vi.fn()
+    // Wed May 6 -> Wed May 20 (display space), dragged mid-week.
+    lastTimelineOptions().onMoving(
+      { id: 'r1', start: new Date(2026, 4, 6), end: new Date(2026, 4, 20) },
+      callback,
+    )
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start: new Date(2026, 4, 4), // Mon May 4
+        end: new Date(2026, 4, 23), // Sat May 23
+      }),
+    )
+  })
+
+  test('onMoving passes weekend background items through untouched', () => {
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={vi.fn()}
+      />,
+    )
+    const callback = vi.fn()
+    const weekend = {
+      id: '__weekend_1',
+      start: new Date(2026, 4, 9),
+      end: new Date(2026, 4, 11),
+      type: 'background',
+    }
+    lastTimelineOptions().onMoving(weekend, callback)
+    expect(callback).toHaveBeenCalledWith(weekend)
+  })
+
+  test('onMove maps the dragged item to a Sigma-format payload and accepts the snapped move', () => {
     const onItemEdit = vi.fn()
     render(
       <LiveTimeline
@@ -278,21 +311,69 @@ describe('LiveTimeline drag editing', () => {
     )
 
     const callback = vi.fn()
+    // Already a snapped display span: Mon May 4 -> Sat May 9.
     const moved = {
       id: 'r1',
-      start: new Date('2026-05-02T00:00:00.000Z'),
-      end: new Date('2026-05-09T00:00:00.000Z'),
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 9),
     }
     lastTimelineOptions().onMove(moved, callback)
 
     // Payload is keyed by the source column ids (the same keys the data arrived
-    // under), not synthetic names. Ungrouped → no group keys.
+    // under), not synthetic names. Ungrouped → no group keys. Format has no T,
+    // Z, or milliseconds (Sigma's Date() can't parse those), and the end is
+    // the data Friday, not the display Saturday.
     expect(onItemEdit).toHaveBeenCalledWith({
       id_col: 'r1',
-      start_col: '2026-05-02T00:00:00.000Z',
-      end_col: '2026-05-09T00:00:00.000Z',
+      start_col: '2026-05-04 00:00:00',
+      end_col: '2026-05-08 00:00:00',
     })
-    expect(callback).toHaveBeenCalledWith(moved)
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start: new Date(2026, 4, 4),
+        end: new Date(2026, 4, 9),
+      }),
+    )
+  })
+
+  test('onMove clamps a right-edge drag past the start to the start\'s own Friday', () => {
+    const onItemEdit = vi.fn()
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    const callback = vi.fn()
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 5) },
+      callback,
+    )
+    expect(onItemEdit).toHaveBeenCalledWith({
+      id_col: 'r1',
+      start_col: '2026-05-04 00:00:00',
+      end_col: '2026-05-08 00:00:00',
+    })
+  })
+
+  test('onMove emits a null end when the item has no end', () => {
+    const onItemEdit = vi.fn()
+    render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    const callback = vi.fn()
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: null },
+      callback,
+    )
+    expect(onItemEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ end_col: null }),
+    )
   })
 
   test('onMove reassigns a lane and emits the full updated value set for the group column', () => {
@@ -325,8 +406,8 @@ describe('LiveTimeline drag editing', () => {
     // Drag the Alice instance (item id "r1|Alice") onto the Carol lane.
     const moved = {
       id: 'r1|Alice',
-      start: new Date('2026-05-02T00:00:00.000Z'),
-      end: new Date('2026-05-09T00:00:00.000Z'),
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 9),
       group: 'Carol',
     }
     lastTimelineOptions().onMove(moved, callback)
@@ -335,11 +416,10 @@ describe('LiveTimeline drag editing', () => {
     // Alice → Carol, Bob preserved (the other lane the row still occupies).
     expect(onItemEdit).toHaveBeenCalledWith({
       id_col: 'r1',
-      start_col: '2026-05-02T00:00:00.000Z',
-      end_col: '2026-05-09T00:00:00.000Z',
+      start_col: '2026-05-04 00:00:00',
+      end_col: '2026-05-08 00:00:00',
       assignee_col: ['Carol', 'Bob'],
     })
-    expect(callback).toHaveBeenCalledWith(moved)
   })
 
   test('onMove cancels the move when no edit handler is wired', () => {
@@ -352,7 +432,7 @@ describe('LiveTimeline drag editing', () => {
 
     const callback = vi.fn()
     lastTimelineOptions().onMove(
-      { id: 'r1', start: new Date('2026-05-02'), end: new Date('2026-05-09') },
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) },
       callback,
     )
 
