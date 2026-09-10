@@ -376,6 +376,43 @@ describe('LiveTimeline drag editing', () => {
     )
   })
 
+  test('drag commit restores vertical scroll that vis-timeline\'s own redraw shifted', () => {
+    // Observed in the wild both ways (revealing rows above OR below the
+    // viewport depending on the drag), so this guards the fix generically:
+    // whatever vis-timeline's own redraw does to scrollTop as a side effect
+    // of accepting the move gets undone, both synchronously and on vis's
+    // 'changed' event (a deferred redraw pass).
+    const onItemEdit = vi.fn()
+    const { container } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    const host = container.querySelector('.timeline-host')!
+    const panel = document.createElement('div')
+    panel.className = 'vis-panel vis-left'
+    host.appendChild(panel)
+    panel.scrollTop = 100
+
+    // Simulate vis-timeline shifting scroll as a side effect of accepting the
+    // moved item, the same way the real library does internally.
+    const callback = vi.fn(() => {
+      panel.scrollTop = 40
+    })
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) },
+      callback,
+    )
+    expect(panel.scrollTop).toBe(100)
+
+    // A deferred second redraw pass, signaled by vis's own 'changed' event.
+    panel.scrollTop = 7
+    lastEventHandler('changed')!({})
+    expect(panel.scrollTop).toBe(100)
+  })
+
   test('onMove reassigns a lane and emits the full updated value set for the group column', () => {
     const onItemEdit = vi.fn()
     // r1 is multi-valued on the group column, so it occupies two lanes at once.
@@ -541,6 +578,76 @@ describe('LiveTimeline drag editing', () => {
       expect.any(DataSet),
     )
     expect(lastTimelineInstance().setGroups).not.toHaveBeenCalledWith(undefined)
+  })
+
+  test('does not clear the items DataSet or re-call setGroups on a no-op data refresh', () => {
+    // A drag-edit round-trip re-sends the whole dataset, giving `data` a new
+    // object identity even when content is unchanged. That used to blow away
+    // and rebuild every item/group (and re-call setGroups every time), which
+    // is what was resetting the user's scroll position on every edit.
+    const config = { ...oneRowConfig, group: 'group_col' }
+    const data = { ...oneRowData, group_col: ['Alice'] }
+    const { rerender } = render(<LiveTimeline config={config} data={data} />)
+
+    const instance = lastTimelineInstance()
+    instance.setGroups.mockClear()
+    const clearSpy = vi.spyOn(DataSet.prototype, 'clear')
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+
+    // New object identities, identical content.
+    rerender(
+      <LiveTimeline
+        config={{ ...config }}
+        data={{ ...data, group_col: [...data.group_col] }}
+      />,
+    )
+
+    expect(clearSpy).not.toHaveBeenCalled()
+    // The unrelated weekend-band resync always removes/re-adds its own ids
+    // (a separate, pre-existing behavior) — assert only that the row/group
+    // the sync effect owns wasn't touched.
+    expect(removeSpy).not.toHaveBeenCalledWith('r1|Alice')
+    expect(removeSpy).not.toHaveBeenCalledWith('Alice')
+    expect(instance.setGroups).not.toHaveBeenCalled()
+
+    clearSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+
+  test('a data refresh only removes the row that actually changed, not the whole DataSet', () => {
+    const config = {
+      [SOURCE]: 'element-1',
+      startDate: 'start_col',
+      endDate: 'end_col',
+      label: 'label_col',
+      idColumn: 'id_col',
+    }
+    const data = {
+      start_col: ['2026-05-01', '2026-06-01'],
+      end_col: ['2026-05-08', '2026-06-08'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const { rerender } = render(<LiveTimeline config={config} data={data} />)
+
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+
+    // Only r1's label changes.
+    rerender(
+      <LiveTimeline
+        config={config}
+        data={{ ...data, label_col: ['T1 edited', 'T2'] }}
+      />,
+    )
+
+    // r1 (content changed) is removed-and-replaced; r2 (unchanged) never is.
+    expect(removeSpy).toHaveBeenCalledWith('r1')
+    expect(removeSpy).not.toHaveBeenCalledWith('r2')
+    expect(removeSpy).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['r2']),
+    )
+
+    removeSpy.mockRestore()
   })
 })
 
