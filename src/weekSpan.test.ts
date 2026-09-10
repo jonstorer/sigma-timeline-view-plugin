@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import {
   addDays,
+  dayBoundDisplaySpan,
   displayEndToDataEnd,
-  displaySpanFromCells,
   formatSigmaDateTime,
   nearestWeekStart,
   parseCellDate,
@@ -133,67 +133,55 @@ describe('toLocalDate', () => {
   })
 })
 
-describe('displaySpanFromCells', () => {
-  test('a mid-week row renders as Mon of the start week -> Sat of the end week', () => {
-    // Wed May 6 -> Wed May 20 (two weeks later)
-    const span = displaySpanFromCells('2026-05-06', '2026-05-20')
-    expect(span?.start.getTime()).toBe(new Date(2026, 4, 4).getTime()) // Mon May 4
-    expect(span?.end.getTime()).toBe(new Date(2026, 4, 23).getTime()) // Sat May 23
+describe('dayBoundDisplaySpan', () => {
+  test('binds start to its own day, NOT snapped to the containing week', () => {
+    // Tue May 5 -> Sat May 9 (an off-grid, non-Monday/Friday row).
+    const span = dayBoundDisplaySpan('2026-05-05', '2026-05-09')
+    expect(span?.start.getTime()).toBe(new Date(2026, 4, 5).getTime()) // Tue, unchanged
+    expect(span?.end.getTime()).toBe(new Date(2026, 4, 10).getTime()) // Sun = Sat + 1
   })
 
-  test('an already-correct Mon/Fri row is unchanged (idempotent)', () => {
-    const span = displaySpanFromCells('2026-05-04 00:00:00', '2026-05-08 00:00:00')
-    expect(span?.start.getTime()).toBe(new Date(2026, 4, 4).getTime())
-    expect(span?.end.getTime()).toBe(new Date(2026, 4, 9).getTime()) // Sat display end
+  test('a mid-week two-week span is rendered exactly as stored, un-aligned', () => {
+    // Wed May 6 -> Wed May 20 (two weeks later) — no Mon/Fri correction.
+    const span = dayBoundDisplaySpan('2026-05-06', '2026-05-20')
+    expect(span?.start.getTime()).toBe(new Date(2026, 4, 6).getTime())
+    expect(span?.end.getTime()).toBe(new Date(2026, 4, 21).getTime())
   })
 
-  test('a UTC-midnight epoch start does not slip to the previous local week', () => {
-    const span = displaySpanFromCells(Date.UTC(2026, 4, 4), Date.UTC(2026, 4, 8))
-    expect(span?.start.getTime()).toBe(new Date(2026, 4, 4).getTime())
-  })
-
-  test('a single-day row (start === end) becomes one full week', () => {
-    const span = displaySpanFromCells('2026-05-06', '2026-05-06') // Wed
+  test('an already-correct Mon/Fri row displays with the same Mon start, Sat display end', () => {
+    const span = dayBoundDisplaySpan('2026-05-04 00:00:00', '2026-05-08 00:00:00')
     expect(span?.start.getTime()).toBe(new Date(2026, 4, 4).getTime())
     expect(span?.end.getTime()).toBe(new Date(2026, 4, 9).getTime())
   })
 
-  test('end before start is clamped to one week', () => {
-    const span = displaySpanFromCells('2026-05-11', '2026-05-04') // end a week before start
+  test('a UTC-midnight epoch start does not slip to the previous local day', () => {
+    const span = dayBoundDisplaySpan(Date.UTC(2026, 4, 5), Date.UTC(2026, 4, 9))
+    expect(span?.start.getTime()).toBe(new Date(2026, 4, 5).getTime())
+  })
+
+  test('a single-day row (start === end) becomes one full day', () => {
+    const span = dayBoundDisplaySpan('2026-05-06', '2026-05-06')
+    expect(span?.start.getTime()).toBe(new Date(2026, 4, 6).getTime())
+    expect(span?.end.getTime()).toBe(new Date(2026, 4, 7).getTime())
+  })
+
+  test('an inverted end (before start) clamps to a one-day span, not corrected further', () => {
+    const span = dayBoundDisplaySpan('2026-05-11', '2026-05-04')
     expect(span?.start.getTime()).toBe(new Date(2026, 4, 11).getTime())
-    expect(span?.end.getTime()).toBe(new Date(2026, 4, 16).getTime())
+    expect(span?.end.getTime()).toBe(new Date(2026, 4, 12).getTime())
   })
 
   test('null or unparseable start/end yields null', () => {
-    expect(displaySpanFromCells(null, '2026-05-08')).toBeNull()
-    expect(displaySpanFromCells('2026-05-04', null)).toBeNull()
-    expect(displaySpanFromCells('garbage', 'garbage')).toBeNull()
+    expect(dayBoundDisplaySpan(null, '2026-05-08')).toBeNull()
+    expect(dayBoundDisplaySpan('2026-05-04', null)).toBeNull()
+    expect(dayBoundDisplaySpan('garbage', 'garbage')).toBeNull()
   })
 
-  test('a span whose weeks straddle a DST boundary stays at local midnight', () => {
+  test('stays at local midnight across a DST boundary', () => {
     // Wed Mar 4 -> Wed Mar 11 2026, straddling the Mar 8 spring-forward.
-    const span = displaySpanFromCells('2026-03-04', '2026-03-11')
+    const span = dayBoundDisplaySpan('2026-03-04', '2026-03-11')
     expect(span?.start.getHours()).toBe(0)
     expect(span?.end.getHours()).toBe(0)
-  })
-
-  test('round-trips through formatSigmaDateTime', () => {
-    const span = displaySpanFromCells('2026-05-04', '2026-05-08')!
-    const dataEnd = displayEndToDataEnd(span.end)
-    const restart = displaySpanFromCells(
-      formatSigmaDateTime(span.start),
-      formatSigmaDateTime(dataEnd),
-    )
-    expect(restart?.start.getTime()).toBe(span.start.getTime())
-    expect(restart?.end.getTime()).toBe(span.end.getTime())
-  })
-
-  test('applying it twice is a no-op (idempotent)', () => {
-    const once = displaySpanFromCells('2026-05-06', '2026-05-20')!
-    const dataEnd = displayEndToDataEnd(once.end)
-    const twice = displaySpanFromCells(once.start, dataEnd)
-    expect(twice?.start.getTime()).toBe(once.start.getTime())
-    expect(twice?.end.getTime()).toBe(once.end.getTime())
   })
 })
 

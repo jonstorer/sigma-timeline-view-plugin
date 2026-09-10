@@ -56,11 +56,13 @@ and exposes its config slots in Sigma's editor panel.
 | `startDate` | column (datetime) | Item start. |
 | `endDate` | column (datetime) | Item end. |
 
-Items always occupy whole Monday→Friday weeks — the smallest planning unit
-this Gantt supports. Values are snapped to their containing week **on every
-read**, so a stored value that's off (e.g. a Sunday-night timestamp meant to
-look like Monday) still renders as a clean Mon–Fri block; dragging an item
-then writes back the clean value.
+A week is the smallest planning unit this Gantt supports, but that's enforced
+only when you **edit** an item (drag). Reading a row does not correct its
+dates — a row whose stored Start/End aren't Monday/Friday renders exactly as
+stored (e.g. a Tue–Sat row draws as a 5-day Tue–Sat bar). Dragging that item
+even slightly snaps both edges onto the Mon–Fri grid and writes the corrected
+dates back. There's no bulk "fix everything" — each off-grid row is corrected
+individually, on its next edit.
 | `label` | column (text/number) | Text shown on the item bar. |
 | `group` | column (multi) | Swimlane assignment. Leave empty to render items flat (no lanes), pick one column for a flat list of lanes, or several in order (top → bottom) for nested groups. Each column may hold single or multi-value cells. |
 | `idColumn` | column | Row id. Required if you want to persist edits. |
@@ -221,12 +223,13 @@ filtered — not yet wired into the plugin.
 - Time axis is locked to the **week** scale (one tick per Monday); major
   labels roll up to month/year.
 - Initial visible window is **today − 1 month → today + 2 months**.
-- Items always span whole Monday→Friday weeks. Each edge snaps independently
-  to its *nearest* week boundary while dragging (not the boundary it's
-  currently over) — that dead zone is what keeps a resize handle from
-  drifting a week on a stray pixel of movement. A body drag (grabbing the
-  item, not an edge) moves both edges together, so its duration in weeks is
-  preserved. An item can't be shrunk below one week.
+- Dragging an item snaps it to a whole Monday→Friday week — the smallest unit
+  this Gantt edits in. Each edge snaps independently to its *nearest* week
+  boundary (not the boundary it's currently over) — that dead zone is what
+  keeps a resize handle from drifting a week on a stray pixel of movement. A
+  body drag (grabbing the item, not an edge) moves both edges together, so its
+  duration in weeks is preserved. An item can't be shrunk below one week.
+  Reading a row applies none of this — see the Data section above.
 - `zoomMin` is 4 weeks, `zoomMax` is 2 years.
 - Vertical scroll is on; each swimlane has a minimum 64px height with a
   6px white separator between lanes.

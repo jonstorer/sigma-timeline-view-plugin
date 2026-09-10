@@ -1,5 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
-import { displaySpanFromCells } from './weekSpan'
+import { dayBoundDisplaySpan } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -221,11 +221,11 @@ export function buildItemsAndGroups(
   }
 
   for (let i = 0; i < rowCount; i++) {
-    // Normalize to a whole Mon->Sat display week on every read, not just on
-    // drag — so a source cell that's off by a day (or mid-week) still renders
-    // as a clean block instead of the stray value it actually holds. Rows
-    // whose dates don't parse at all are skipped, same as the old null-guard.
-    const span = displaySpanFromCells(starts[i], ends[i])
+    // Bind to whole day columns on read — NOT snapped to Mon/Fri weeks. The
+    // sheet's stored dates render as-is (an off-week row looks off-week);
+    // only dragging (see LiveTimeline's onMoving/onMove) enforces the weekly
+    // grain. Rows whose dates don't parse at all are skipped.
+    const span = dayBoundDisplaySpan(starts[i], ends[i])
     if (!span) continue
 
     const rowId = idCol ? ids[i] : `__row_${i}`

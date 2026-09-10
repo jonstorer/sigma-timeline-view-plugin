@@ -1,28 +1,32 @@
 import moment from 'moment'
 
 /**
- * Calendar math for whole-week (Monday→Friday) items.
+ * Calendar math for Gantt items. Two distinct behaviors live here, deliberately
+ * different, and must not be unified:
  *
- * Two rules differ deliberately between *reading* stored data and *dragging*:
- *
- *  - Inbound cells are exact calendar days, so `displaySpanFromCells` floors
- *    to the containing week (`weekStart`) — unambiguous and idempotent.
- *  - Drag values are approximate pointer positions, so `snapDisplaySpan` rounds
- *    to the *nearest* week boundary (`nearestWeekStart`). Flooring here would
- *    mean a resize handle sitting exactly on its own Monday — which is where
- *    it starts — floors to the *previous* week on a single pixel of leftward
+ *  - READING stored data (`dayBoundDisplaySpan`) does NOT enforce Monday–Friday
+ *    weeks. It only binds each raw date to its own day column — start to the
+ *    left edge of its day, end to the right edge of its day — so a bar's edges
+ *    always sit on day gridlines instead of drifting mid-day. Data the sheet
+ *    holds is shown as-is; a Tue–Sat row renders as a 5-day Tue–Sat bar, not
+ *    silently corrected. Existing off-week data is expected to look "wrong"
+ *    (non-Mon/Fri) until someone actually edits it.
+ *  - DRAGGING (`snapDisplaySpan`) is the only path that enforces the
+ *    Monday-start/Friday-end weekly grain: the smallest planning unit this
+ *    Gantt supports is a week, so any edit snaps both edges onto it. Drag
+ *    values are approximate pointer positions, so this rounds to the
+ *    *nearest* week boundary (`nearestWeekStart`), not the floor — flooring
+ *    would mean a resize handle sitting exactly on its own Monday (where it
+ *    starts) floors to the *previous* week on a single pixel of leftward
  *    jitter, silently kicking the item back 7 days. `nearest` gives every
  *    handle a dead zone around its own position.
  *
- * Do not unify these two rules; they're solving different problems.
- *
- * All items are stored as DATA: start = Monday 00:00, end = Friday 00:00. But
- * a bar whose end is Friday 00:00 stops at the Friday gridline and visually
- * excludes Friday, so vis-timeline is given a DISPLAY end one day later, at
- * Saturday 00:00 — the right edge of the Friday column. `displayEndToDataEnd`
- * / the `+5` in `displaySpanFromCells` are that offset. Never write a DISPLAY
- * value back to Sigma, and never format a DISPLAY end into a tooltip without
- * converting it back to the Friday the user actually dragged onto.
+ * The DISPLAY/DATA distinction still applies to both: a bar whose end is at
+ * midnight of its last calendar day stops at that day's left gridline and
+ * visually excludes it, so vis-timeline is always given a DISPLAY end one day
+ * later than the DATA end — the right edge of the last day's column.
+ * `displayEndToDataEnd` converts back. Never write a DISPLAY value to Sigma,
+ * and never format one into a tooltip without converting it back first.
  *
  * Dates are handled as LOCAL midnight throughout (never `.toISOString()`,
  * which reinterprets in UTC and can shift the calendar day). This matches
@@ -120,22 +124,22 @@ export function displayEndToDataEnd(displayEnd: Date): Date {
 }
 
 /**
- * DISPLAY span for a data row: Monday of the start's week → Saturday of the
- * end's week (the display offset), clamped to at least one week. Floors both
- * ends — see the module doc for why this differs from `snapDisplaySpan`.
- * Idempotent: re-running it on its own output is a no-op.
+ * DISPLAY span for a data row, with NO week alignment: start binds to the left
+ * edge of its own calendar day, end binds to the right edge of *its* calendar
+ * day (one day later). A Tue→Sat row in the sheet renders as a Tue→Sat bar —
+ * this deliberately does not correct it. Only dragging (`snapDisplaySpan`)
+ * enforces the Monday/Friday week grain. Clamped to a one-day minimum (an
+ * inverted end is treated as equal to the start) purely so a bad row still
+ * renders as *something* rather than a zero/negative-width item.
  */
-export function displaySpanFromCells(
+export function dayBoundDisplaySpan(
   rawStart: unknown,
   rawEnd: unknown,
 ): DisplaySpan | null {
-  const s0 = parseCellDate(rawStart)
-  const e0 = parseCellDate(rawEnd)
-  if (!s0 || !e0) return null
-  const start = weekStart(s0)
-  const end = addDays(weekStart(e0), 5)
-  const minEnd = addDays(start, 5)
-  return { start, end: end.getTime() < minEnd.getTime() ? minEnd : end }
+  const start = parseCellDate(rawStart)
+  const end = parseCellDate(rawEnd)
+  if (!start || !end) return null
+  return { start, end: addDays(end.getTime() < start.getTime() ? start : end, 1) }
 }
 
 /**

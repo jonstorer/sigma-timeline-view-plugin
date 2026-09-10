@@ -564,32 +564,32 @@ describe('buildItemsAndGroups', () => {
   })
 })
 
-describe('buildItemsAndGroups week snapping', () => {
+describe('buildItemsAndGroups day-bound display (no week snapping on read)', () => {
   const config = { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' }
 
-  test('a mid-week row renders as Mon of its start week -> Sat of its end week', () => {
-    // Wed May 6 -> Wed May 20, 2026 (two weeks later).
+  test('an off-grid row renders exactly as stored, NOT corrected to Mon/Fri', () => {
+    // Tue May 5 -> Sat May 9, 2026 — deliberately not a Mon/Fri week.
     const data = {
-      start_col: ['2026-05-06'],
-      end_col: ['2026-05-20'],
+      start_col: ['2026-05-05'],
+      end_col: ['2026-05-09'],
       id_col: ['r1'],
     }
     const result = buildItemsAndGroups(config, data)
-    expect(result.items[0].start).toEqual(new Date(2026, 4, 4)) // Mon May 4
-    expect(result.items[0].end).toEqual(new Date(2026, 4, 23)) // Sat May 23
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 5)) // Tue, unchanged
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 10)) // Sun = Sat + 1 (display offset only)
   })
 
-  test('a UTC-midnight epoch start does not slip to the previous local week', () => {
+  test('a UTC-midnight epoch start does not slip to the previous local day', () => {
     const data = {
-      start_col: [Date.UTC(2026, 4, 4)],
-      end_col: [Date.UTC(2026, 4, 8)],
+      start_col: [Date.UTC(2026, 4, 5)],
+      end_col: [Date.UTC(2026, 4, 9)],
       id_col: ['r1'],
     }
     const result = buildItemsAndGroups(config, data)
-    expect(result.items[0].start).toEqual(new Date(2026, 4, 4))
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 5))
   })
 
-  test('end before start is clamped to one week', () => {
+  test('an inverted end (before start) clamps to a one-day span, not a full week', () => {
     const data = {
       start_col: ['2026-05-11'],
       end_col: ['2026-05-04'],
@@ -597,7 +597,7 @@ describe('buildItemsAndGroups week snapping', () => {
     }
     const result = buildItemsAndGroups(config, data)
     expect(result.items[0].start).toEqual(new Date(2026, 4, 11))
-    expect(result.items[0].end).toEqual(new Date(2026, 4, 16))
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 12))
   })
 
   test('an unparseable date cell skips the row', () => {
@@ -608,22 +608,6 @@ describe('buildItemsAndGroups week snapping', () => {
     }
     const result = buildItemsAndGroups(config, data)
     expect(result.items).toHaveLength(0)
-  })
-
-  test('normalization is idempotent: feeding back its own write-back format is a no-op', () => {
-    const first = buildItemsAndGroups(config, {
-      start_col: ['2026-05-06'],
-      end_col: ['2026-05-20'],
-      id_col: ['r1'],
-    })
-    const second = buildItemsAndGroups(config, {
-      // Sigma stores the DATA end (Friday), not the DISPLAY end (Saturday).
-      start_col: ['2026-05-04 00:00:00'],
-      end_col: ['2026-05-22 00:00:00'],
-      id_col: ['r1'],
-    })
-    expect(second.items[0].start).toEqual(first.items[0].start)
-    expect(second.items[0].end).toEqual(first.items[0].end)
   })
 })
 
