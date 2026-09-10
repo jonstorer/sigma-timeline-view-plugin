@@ -376,6 +376,43 @@ describe('LiveTimeline drag editing', () => {
     )
   })
 
+  test('drag commit restores vertical scroll that vis-timeline\'s own redraw shifted', () => {
+    // Observed in the wild both ways (revealing rows above OR below the
+    // viewport depending on the drag), so this guards the fix generically:
+    // whatever vis-timeline's own redraw does to scrollTop as a side effect
+    // of accepting the move gets undone, both synchronously and on vis's
+    // 'changed' event (a deferred redraw pass).
+    const onItemEdit = vi.fn()
+    const { container } = render(
+      <LiveTimeline
+        config={oneRowConfig}
+        data={oneRowData}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    const host = container.querySelector('.timeline-host')!
+    const panel = document.createElement('div')
+    panel.className = 'vis-panel vis-left'
+    host.appendChild(panel)
+    panel.scrollTop = 100
+
+    // Simulate vis-timeline shifting scroll as a side effect of accepting the
+    // moved item, the same way the real library does internally.
+    const callback = vi.fn(() => {
+      panel.scrollTop = 40
+    })
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) },
+      callback,
+    )
+    expect(panel.scrollTop).toBe(100)
+
+    // A deferred second redraw pass, signaled by vis's own 'changed' event.
+    panel.scrollTop = 7
+    lastEventHandler('changed')!({})
+    expect(panel.scrollTop).toBe(100)
+  })
+
   test('onMove reassigns a lane and emits the full updated value set for the group column', () => {
     const onItemEdit = vi.fn()
     // r1 is multi-valued on the group column, so it occupies two lanes at once.

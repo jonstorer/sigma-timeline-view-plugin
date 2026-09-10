@@ -66,6 +66,45 @@ function syncDataSet<T extends { id?: string | number }>(
 }
 
 /**
+ * An item update can shift vis-timeline's internal vertical scroll position as
+ * a side effect of its own redraw (observed in both directions — revealing
+ * rows above OR below depending on the drag — so this isn't limited to one
+ * specific layout cause; it's cheaper to just undo whatever vis did than to
+ * chase every trigger). This happens purely from the local vis-timeline
+ * update, independent of whether the write to Sigma even succeeds.
+ *
+ * There's no public API to read or hold that scrollTop steady across a
+ * redraw, but vis-timeline treats its left label panel's real DOM `scrollTop`
+ * as the source of truth — setting it fires vis's own internal 'scroll'
+ * listener, which re-syncs vis's state from it. So this isn't fighting vis,
+ * just re-asserting the value after vis moves it.
+ *
+ * Timing: restore synchronously (catches a same-tick redraw) and again on
+ * every 'changed' event vis emits for a short window afterward — 'changed'
+ * fires once per completed redraw pass (vis can run a few in a row internally
+ * when a layout change cascades), so it's a deterministic "redraw settled"
+ * signal rather than a guessed frame count.
+ */
+function withPreservedVerticalScroll<T>(
+  tl: Timeline | null,
+  container: HTMLElement | null,
+  run: () => T,
+): T {
+  const panel = container?.querySelector<HTMLElement>('.vis-panel.vis-left')
+  const scrollTop = panel?.scrollTop
+  if (!tl || !panel || scrollTop == null) return run()
+
+  const restore = () => {
+    if (panel.scrollTop !== scrollTop) panel.scrollTop = scrollTop
+  }
+  tl.on('changed', restore)
+  const result = run()
+  restore()
+  setTimeout(() => tl.off('changed', restore), 100)
+  return result
+}
+
+/**
  * Drag-edit write-back payload, serialized to the edit variable. Keyed by the
  * *source column ids* — the same keys the data arrived under — so the edit
  * action maps each field straight back to its column:
@@ -230,7 +269,9 @@ export function LiveTimeline({
           return
         }
         const span = snapDisplaySpan(item.start, item.end)
-        callback(span ? { ...item, start: span.start, end: span.end } : item)
+        withPreservedVerticalScroll(timelineRef.current, container, () =>
+          callback(span ? { ...item, start: span.start, end: span.end } : item),
+        )
       },
       onMove: (item, callback) => {
         const handler = onItemEditRef.current
@@ -241,7 +282,7 @@ export function LiveTimeline({
         const startCol = cfg?.startDate
         const endCol = cfg?.endDate
         if (!handler || rowId == null || !idCol || !startCol || !endCol) {
-          callback(null)
+          withPreservedVerticalScroll(timelineRef.current, container, () => callback(null))
           return
         }
         // Re-snap rather than trust onMoving's last frame: a drop can arrive
@@ -274,7 +315,9 @@ export function LiveTimeline({
           })
         }
         handler(payload)
-        callback(span ? { ...item, start: span.start, end: span.end } : item)
+        withPreservedVerticalScroll(timelineRef.current, container, () =>
+          callback(span ? { ...item, start: span.start, end: span.end } : item),
+        )
       },
       moment: (date: moment.MomentInput) => moment(date),
       tooltipOnItemUpdateTime: {
@@ -424,27 +467,31 @@ export function LiveTimeline({
     const tl = timelineRef.current
     if (!itemsDs || !groupsDs || !tl) return
 
-    // Diff instead of clear()+add(): every edit re-sends the full dataset, so
-    // `items`/`groups` get new array identities on every keystroke-equivalent
-    // change even when almost nothing actually differs. A clear() briefly
-    // empties the DataSet and re-adding everything touches every item's DOM
-    // node, which is what was resetting scroll position on each edit.
-    // Untouched rows are now left alone entirely.
-    syncDataSet(groupsDs, groups)
+    withPreservedVerticalScroll(tl, containerRef.current, () => {
+      // Diff instead of clear()+add(): every edit re-sends the full dataset,
+      // so `items`/`groups` get new array identities on every keystroke-
+      // equivalent change even when almost nothing actually differs. A
+      // clear() briefly empties the DataSet and re-adding everything touches
+      // every item's DOM node, which is what was resetting scroll position on
+      // each edit. Untouched rows are now left alone entirely. (A real
+      // content change can still legitimately alter a lane's stacked height,
+      // which is what withPreservedVerticalScroll guards against.)
+      syncDataSet(groupsDs, groups)
 
-    // setGroups() rebinds the Timeline's rendering to the groups source and
-    // resets its internal scroll — only call it on an actual grouped <->
-    // ungrouped transition, not every time (groupsDs is the same instance on
-    // every render; re-passing it is a no-op vis can't distinguish from "start
-    // over").
-    const hasGroups = groups.length > 0
-    if (groupsAttachedRef.current !== hasGroups) {
-      tl.setGroups(hasGroups ? groupsDs : undefined)
-      groupsAttachedRef.current = hasGroups
-    }
+      // setGroups() rebinds the Timeline's rendering to the groups source and
+      // resets its internal scroll — only call it on an actual grouped <->
+      // ungrouped transition, not every time (groupsDs is the same instance
+      // on every render; re-passing it is a no-op vis can't distinguish from
+      // "start over").
+      const hasGroups = groups.length > 0
+      if (groupsAttachedRef.current !== hasGroups) {
+        tl.setGroups(hasGroups ? groupsDs : undefined)
+        groupsAttachedRef.current = hasGroups
+      }
 
-    syncDataSet(itemsDs, items, new Set(weekendIdsRef.current))
-    syncWeekends()
+      syncDataSet(itemsDs, items, new Set(weekendIdsRef.current))
+      syncWeekends()
+    })
   }, [items, groups, syncWeekends])
 
   const hasSource = Boolean(config?.[SOURCE])
