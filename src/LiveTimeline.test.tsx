@@ -542,6 +542,76 @@ describe('LiveTimeline drag editing', () => {
     )
     expect(lastTimelineInstance().setGroups).not.toHaveBeenCalledWith(undefined)
   })
+
+  test('does not clear the items DataSet or re-call setGroups on a no-op data refresh', () => {
+    // A drag-edit round-trip re-sends the whole dataset, giving `data` a new
+    // object identity even when content is unchanged. That used to blow away
+    // and rebuild every item/group (and re-call setGroups every time), which
+    // is what was resetting the user's scroll position on every edit.
+    const config = { ...oneRowConfig, group: 'group_col' }
+    const data = { ...oneRowData, group_col: ['Alice'] }
+    const { rerender } = render(<LiveTimeline config={config} data={data} />)
+
+    const instance = lastTimelineInstance()
+    instance.setGroups.mockClear()
+    const clearSpy = vi.spyOn(DataSet.prototype, 'clear')
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+
+    // New object identities, identical content.
+    rerender(
+      <LiveTimeline
+        config={{ ...config }}
+        data={{ ...data, group_col: [...data.group_col] }}
+      />,
+    )
+
+    expect(clearSpy).not.toHaveBeenCalled()
+    // The unrelated weekend-band resync always removes/re-adds its own ids
+    // (a separate, pre-existing behavior) — assert only that the row/group
+    // the sync effect owns wasn't touched.
+    expect(removeSpy).not.toHaveBeenCalledWith('r1|Alice')
+    expect(removeSpy).not.toHaveBeenCalledWith('Alice')
+    expect(instance.setGroups).not.toHaveBeenCalled()
+
+    clearSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+
+  test('a data refresh only removes the row that actually changed, not the whole DataSet', () => {
+    const config = {
+      [SOURCE]: 'element-1',
+      startDate: 'start_col',
+      endDate: 'end_col',
+      label: 'label_col',
+      idColumn: 'id_col',
+    }
+    const data = {
+      start_col: ['2026-05-01', '2026-06-01'],
+      end_col: ['2026-05-08', '2026-06-08'],
+      label_col: ['T1', 'T2'],
+      id_col: ['r1', 'r2'],
+    }
+    const { rerender } = render(<LiveTimeline config={config} data={data} />)
+
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+
+    // Only r1's label changes.
+    rerender(
+      <LiveTimeline
+        config={config}
+        data={{ ...data, label_col: ['T1 edited', 'T2'] }}
+      />,
+    )
+
+    // r1 (content changed) is removed-and-replaced; r2 (unchanged) never is.
+    expect(removeSpy).toHaveBeenCalledWith('r1')
+    expect(removeSpy).not.toHaveBeenCalledWith('r2')
+    expect(removeSpy).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['r2']),
+    )
+
+    removeSpy.mockRestore()
+  })
 })
 
 describe('LiveTimeline double-click select', () => {

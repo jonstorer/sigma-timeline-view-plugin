@@ -24,6 +24,48 @@ import type { ItemVisual, TimelineConfig } from './types'
 const DAY_MS = 1000 * 60 * 60 * 24
 
 /**
+ * Reconcile a vis-data DataSet to `next` without clearing it first. Rows not
+ * in `next` are removed; rows whose content is unchanged are left completely
+ * untouched (no DataSet event fires for them, so vis-timeline doesn't re-touch
+ * their DOM); only rows that are new or actually differ are replaced.
+ *
+ * A plain `.update()` won't do here: vis-data merges partial updates onto the
+ * existing object (`{...old, ...update}`), so a field that's present on the
+ * old item but omitted from the new one (e.g. a cleared highlight color)
+ * would silently survive. Removing + re-adding changed rows avoids that.
+ *
+ * `skipIds` excludes rows this effect doesn't own (weekend background bands,
+ * synced separately) from both the removal and diff passes.
+ */
+function syncDataSet<T extends { id?: string | number }>(
+  ds: DataSet<T>,
+  next: T[],
+  skipIds: ReadonlySet<string> = new Set(),
+): void {
+  const nextById = new Map(next.map((item) => [String(item.id), item]))
+  const existingIds = ds
+    .getIds()
+    .map(String)
+    .filter((id) => !skipIds.has(id))
+
+  const staleIds = existingIds.filter((id) => !nextById.has(id))
+  if (staleIds.length > 0) ds.remove(staleIds)
+
+  const toAdd: T[] = []
+  for (const id of existingIds) {
+    const nextItem = nextById.get(id)
+    if (!nextItem) continue
+    nextById.delete(id)
+    if (JSON.stringify(ds.get(id)) !== JSON.stringify(nextItem)) {
+      ds.remove(id)
+      toAdd.push(nextItem)
+    }
+  }
+  toAdd.push(...nextById.values())
+  if (toAdd.length > 0) ds.add(toAdd)
+}
+
+/**
  * Drag-edit write-back payload, serialized to the edit variable. Keyed by the
  * *source column ids* — the same keys the data arrived under — so the edit
  * action maps each field straight back to its column:
@@ -56,6 +98,10 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
+  // Whether groupsDs is currently the Timeline's active groups source. Lets
+  // the sync effect below skip re-calling setGroups() when nothing about
+  // grouped-vs-ungrouped changed — see that effect for why it matters.
+  const groupsAttachedRef = useRef<boolean | null>(null)
   // The current config (for the source column ids the edit payload is keyed by)
   // and the group write-back context, read inside the once-wired onMove handler.
   const configRef = useRef(config)
@@ -377,16 +423,27 @@ export function LiveTimeline({
     const groupsDs = groupsDsRef.current
     const tl = timelineRef.current
     if (!itemsDs || !groupsDs || !tl) return
-    itemsDs.clear()
-    weekendIdsRef.current = []
-    groupsDs.clear()
-    if (groups.length > 0) {
-      groupsDs.add(groups)
-      tl.setGroups(groupsDs)
-    } else {
-      tl.setGroups(undefined)
+
+    // Diff instead of clear()+add(): every edit re-sends the full dataset, so
+    // `items`/`groups` get new array identities on every keystroke-equivalent
+    // change even when almost nothing actually differs. A clear() briefly
+    // empties the DataSet and re-adding everything touches every item's DOM
+    // node, which is what was resetting scroll position on each edit.
+    // Untouched rows are now left alone entirely.
+    syncDataSet(groupsDs, groups)
+
+    // setGroups() rebinds the Timeline's rendering to the groups source and
+    // resets its internal scroll — only call it on an actual grouped <->
+    // ungrouped transition, not every time (groupsDs is the same instance on
+    // every render; re-passing it is a no-op vis can't distinguish from "start
+    // over").
+    const hasGroups = groups.length > 0
+    if (groupsAttachedRef.current !== hasGroups) {
+      tl.setGroups(hasGroups ? groupsDs : undefined)
+      groupsAttachedRef.current = hasGroups
     }
-    itemsDs.add(items)
+
+    syncDataSet(itemsDs, items, new Set(weekendIdsRef.current))
     syncWeekends()
   }, [items, groups, syncWeekends])
 
