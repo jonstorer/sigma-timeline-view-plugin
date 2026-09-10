@@ -92,16 +92,21 @@ an id column `ID`, dates `Start`/`End`, and a Group-by column `Assignees`:
 later week** — the inclusive last day of the item, not an exclusive
 end-of-next-week.
 
-Sigma-side, parse with `JsonExtract` (substitute your own column names). The
-date format has no `T`, `Z`, or milliseconds, so plain `Date()` parses it —
-`DateParse` isn't needed:
+Sigma-side, parse with `Json()` + dot notation (substitute your own column
+names). Dot-notation access returns **variant** data, not text — wrap it in
+`Text()` before handing it to `Date()`, or `Date()` receives a variant it
+can't parse and silently fails. The date format itself has no `T`, `Z`, or
+milliseconds, so plain `Date()` is enough once it's given text — `DateParse`
+isn't needed:
 
 ```
-JsonExtract([editPayload], "ID")
-Date(JsonExtract([editPayload], "Start"))
-Date(JsonExtract([editPayload], "End"))
-JsonExtract([editPayload], "Assignees")   // JSON array of the column's new values
+Text(Json([editPayload]).ID)
+Date(Text(Json([editPayload]).Start))
+Date(Text(Json([editPayload]).End))
+Json([editPayload]).Assignees   // JSON array of the column's new values
 ```
+
+A field name with spaces needs quotes: `Json([editPayload])."Start Date"`.
 
 #### Lane reassignment
 
@@ -130,8 +135,9 @@ Double-click-to-create (new items) is not wired in this build.
 Wire these slots to fire a Sigma Action when an item is selected. On select the
 plugin serializes the configured **pass-through columns** for that row into a
 JSON string, writes it to the text variable, then fires the action. Sigma-side,
-pull out the fields you need with `JsonExtract` — no per-column lookups, since
-the values ride along in the payload.
+pull out the fields you need with `Json()` + dot notation (wrap in `Text()`,
+`Number()`, etc. for a typed value) — no per-column lookups, since the values
+ride along in the payload.
 
 | Slot | Type | Purpose |
 |---|---|---|
@@ -140,7 +146,7 @@ the values ride along in the payload.
 | `selectAction` | action-trigger | Fires after the JSON is set. |
 
 The JSON is keyed by **column name**, so a control's value is just
-`JsonExtract([<passthroughVariable>], "<Column Name>")`. Re-selecting the same
+`Text(Json([<passthroughVariable>])."<Column Name>")`. Re-selecting the same
 row produces identical JSON, so the action does not re-fire (matching drag-edits,
 which no-op when nothing changed). A reset button can re-run the same populate
 sequence to restore the form from the still-current payload.
