@@ -55,6 +55,14 @@ and exposes its config slots in Sigma's editor panel.
 | `source` | element | The data source (worksheet / table). |
 | `startDate` | column (datetime) | Item start. |
 | `endDate` | column (datetime) | Item end. |
+
+A week is the smallest planning unit this Gantt supports, but that's enforced
+only when you **edit** an item (drag). Reading a row does not correct its
+dates — a row whose stored Start/End aren't Monday/Friday renders exactly as
+stored (e.g. a Tue–Sat row draws as a 5-day Tue–Sat bar). Dragging that item
+even slightly snaps both edges onto the Mon–Fri grid and writes the corrected
+dates back. There's no bulk "fix everything" — each off-grid row is corrected
+individually, on its next edit.
 | `label` | column (text/number) | Text shown on the item bar. |
 | `group` | column (multi) | Swimlane assignment. Leave empty to render items flat (no lanes), pick one column for a flat list of lanes, or several in order (top → bottom) for nested groups. Each column may hold single or multi-value cells. |
 | `idColumn` | column | Row id. Required if you want to persist edits. |
@@ -66,7 +74,7 @@ plugin writes a JSON payload to the text variable and fires the action.
 
 | Slot | Type | Purpose |
 |---|---|---|
-| `editPayloadVariable` | variable (text) | Receives a JSON object **keyed by your source column names**: the id column → `<rowId>`, start/end columns → `"<ISO>"`, and each **Group by** column → an array of that column's values for the row. |
+| `editPayloadVariable` | variable (text) | Receives a JSON object **keyed by your source column names**: the id column → `<rowId>`, start/end columns → `"YYYY-MM-DD HH:MM:SS"`, and each **Group by** column → an array of that column's values for the row. |
 | `editAction` | action-trigger | Fires after the variable is set. |
 
 `idColumn` must also be configured — without it the plugin has no row id
@@ -77,15 +85,21 @@ the edit action maps each field directly back to its column. For example, with
 an id column `ID`, dates `Start`/`End`, and a Group-by column `Assignees`:
 
 ```json
-{ "ID": "r1", "Start": "<ISO>", "End": "<ISO>", "Assignees": ["Carol", "Bob"] }
+{ "ID": "r1", "Start": "2026-05-04 00:00:00", "End": "2026-05-08 00:00:00", "Assignees": ["Carol", "Bob"] }
 ```
 
-Sigma-side, parse with `JsonExtract` (substitute your own column names):
+`Start` is always a Monday, `End` is always the **Friday of that same or a
+later week** — the inclusive last day of the item, not an exclusive
+end-of-next-week.
+
+Sigma-side, parse with `JsonExtract` (substitute your own column names). The
+date format has no `T`, `Z`, or milliseconds, so plain `Date()` parses it —
+`DateParse` isn't needed:
 
 ```
 JsonExtract([editPayload], "ID")
-DateParse(JsonExtract([editPayload], "Start"))
-DateParse(JsonExtract([editPayload], "End"))
+Date(JsonExtract([editPayload], "Start"))
+Date(JsonExtract([editPayload], "End"))
 JsonExtract([editPayload], "Assignees")   // JSON array of the column's new values
 ```
 
@@ -177,6 +191,11 @@ independent "memberships" rather than a paired list.
 
 ### Lazy load by visible window (optional)
 
+**Not implemented in this build** — no `visibleStartVariable`/`visibleEndVariable`
+slots exist in the editor panel and no debounced writer exists in the code.
+Documented here as the intended design; treat this section as aspirational
+until it's wired up.
+
 Wire these to drive a server-side date-range filter. On every pan/zoom
 (debounced 300ms), the plugin writes the visible window to the variables;
 your Sigma-side filter then refetches only the matching rows.
@@ -204,9 +223,14 @@ filtered — not yet wired into the plugin.
 - Time axis is locked to the **week** scale (one tick per Monday); major
   labels roll up to month/year.
 - Initial visible window is **today − 1 month → today + 2 months**.
-- Items snap to the previous Monday on drag/resize. vis-timeline preserves
-  duration natively on whole-bar drags.
-- `zoomMin` is 4 weeks, `zoomMax` is 5 years.
+- Dragging an item snaps it to a whole Monday→Friday week — the smallest unit
+  this Gantt edits in. Each edge snaps independently to its *nearest* week
+  boundary (not the boundary it's currently over) — that dead zone is what
+  keeps a resize handle from drifting a week on a stray pixel of movement. A
+  body drag (grabbing the item, not an edge) moves both edges together, so its
+  duration in weeks is preserved. An item can't be shrunk below one week.
+  Reading a row applies none of this — see the Data section above.
+- `zoomMin` is 4 weeks, `zoomMax` is 2 years.
 - Vertical scroll is on; each swimlane has a minimum 64px height with a
   6px white separator between lanes.
 

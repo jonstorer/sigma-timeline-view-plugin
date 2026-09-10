@@ -564,6 +564,53 @@ describe('buildItemsAndGroups', () => {
   })
 })
 
+describe('buildItemsAndGroups day-bound display (no week snapping on read)', () => {
+  const config = { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' }
+
+  test('an off-grid row renders exactly as stored, NOT corrected to Mon/Fri', () => {
+    // Tue May 5 -> Sat May 9, 2026 — deliberately not a Mon/Fri week.
+    const data = {
+      start_col: ['2026-05-05'],
+      end_col: ['2026-05-09'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 5)) // Tue, unchanged
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 10)) // Sun = Sat + 1 (display offset only)
+  })
+
+  test('a UTC-midnight epoch start does not slip to the previous local day', () => {
+    const data = {
+      start_col: [Date.UTC(2026, 4, 5)],
+      end_col: [Date.UTC(2026, 4, 9)],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 5))
+  })
+
+  test('an inverted end (before start) clamps to a one-day span, not a full week', () => {
+    const data = {
+      start_col: ['2026-05-11'],
+      end_col: ['2026-05-04'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 11))
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 12))
+  })
+
+  test('an unparseable date cell skips the row', () => {
+    const data = {
+      start_col: ['garbage'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items).toHaveLength(0)
+  })
+})
+
 describe('pathToGroupId', () => {
   test('joins path segments with pipe', () => {
     expect(pathToGroupId(['NA', 'Team Alpha', 'Alice'], 2)).toBe(

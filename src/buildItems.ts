@@ -1,4 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
+import { dayBoundDisplaySpan } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -220,9 +221,12 @@ export function buildItemsAndGroups(
   }
 
   for (let i = 0; i < rowCount; i++) {
-    const rawStart = starts[i]
-    const rawEnd = ends[i]
-    if (rawStart == null || rawEnd == null) continue
+    // Bind to whole day columns on read — NOT snapped to Mon/Fri weeks. The
+    // sheet's stored dates render as-is (an off-week row looks off-week);
+    // only dragging (see LiveTimeline's onMoving/onMove) enforces the weekly
+    // grain. Rows whose dates don't parse at all are skipped.
+    const span = dayBoundDisplaySpan(starts[i], ends[i])
+    if (!span) continue
 
     const rowId = idCol ? ids[i] : `__row_${i}`
     const label = labelCol ? String(labels[i] ?? '') : ''
@@ -258,8 +262,8 @@ export function buildItemsAndGroups(
         id: itemId,
         ...(group ? { group } : {}),
         content: label,
-        start: rawStart as DataItem['start'],
-        end: rawEnd as DataItem['end'],
+        start: span.start,
+        end: span.end,
         type: 'range',
         ...(style ? { style } : {}),
         ...(className ? { className } : {}),
