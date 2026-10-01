@@ -189,14 +189,18 @@ doesn't persist across reloads and isn't wired to a Sigma variable.
 
 **Visual.** Compares the projected date against the item's own stored end:
 
-- **Projected later** (behind schedule): a dashed red extension past the
-  bar's right edge, out to the projected date. This is a real (non-draggable)
-  item, not a cosmetic overlay — it participates in the same-lane stacking
-  vis-timeline already does, so a later item in that lane gets bumped onto its
-  own row instead of the overrun visually running through it. This means
-  turning the checkbox on can grow lane heights.
+- **Projected later** (behind schedule): the bar itself is widened out to the
+  projected date, with the real portion solid and the overrun shown as a
+  dashed red fill. Widening the actual bar — rather than drawing a separate
+  overlay next to it — is what makes vis-timeline's own lane-stacking treat
+  the overrun as real estate: a later item in that lane gets bumped onto its
+  own row instead of the overrun visually running through it, and the bar
+  stays visually contiguous with itself (nothing to misalign). This means
+  turning the checkbox on can grow lane heights. The right-edge drag handle
+  sits at the projected date while this is showing, but editing still writes
+  the item's real end — the plugin compensates automatically.
 - **Projected earlier** (ahead of schedule): a thin green marker line inside
-  the bar, at the projected date. Stays within the bar's own footprint, so it
+  the bar, at the projected date. The bar's own width is unchanged, so it
   never affects lane height.
 - **Projected on the same day**: no overlay — on track.
 

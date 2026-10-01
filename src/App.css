@@ -307,22 +307,29 @@
   overflow: hidden;
 }
 
-/* Projected-completion overlay. Two different mechanisms for two different
-   risks — see resolveProjection's doc comment in buildItems.ts:
+/* Projected-completion overlay — one mechanism for both directions now (see
+   resolveProjection's doc comment in buildItems.ts for why): a
+   `--projection-ratio` custom property (a percentage of the item's own
+   rendered width, so it scales at any zoom level) plus a has-projection-*
+   class, gated behind the `show-projection` class the header checkbox adds to
+   `.timeline-host`. Purely decorative — never intercepts a click/hover meant
+   for the real item.
 
-   AHEAD (projected earlier than stored end) never leaves the bar's own
-   footprint, so it's pure CSS: a `--projection-ratio` custom property (a
-   percentage of the item's own width, scales at any zoom level) plus
-   `has-projection-ahead`, gated behind the `show-projection` class the header
-   checkbox adds to `.timeline-host` — toggling it never touches the DataSet. */
-.timeline-host .vis-item.vis-range.has-projection-ahead::after {
+   AHEAD (projected earlier than stored end): the item's own width is
+   unchanged, and the marker sits inside it at the projected date.
+   BEHIND (projected later): LiveTimeline widens the item's actual rendered
+   `end` to the projected date while the toggle is on, so vis-timeline's own
+   stacking treats the overrun as this item's real footprint (bumping a
+   colliding sibling for free, no custom packing needed) — `--projection-ratio`
+   then marks where the real end falls *within* that widened box, and
+   everything past it is shaded as the overrun. */
+.timeline-host .vis-item.vis-range.has-projection-ahead::after,
+.timeline-host .vis-item.vis-range.has-projection-behind::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   display: none;
-  /* Purely decorative — never intercepts a click/hover meant for the real
-     item underneath or around it. */
   pointer-events: none;
 }
 .timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::after {
@@ -331,27 +338,15 @@
   width: 2px;
   background: #16a34a;
 }
-
-/* BEHIND (projected later) extends past the bar, into territory
-   vis-timeline's stacking doesn't know is occupied — a real `type:'range'`
-   ghost item (see buildItemsAndGroups), non-interactive (editable:false,
-   selectable:false), so it participates in `stack` and vis-timeline bumps a
-   later same-lane item onto its own row instead of letting the overrun run
-   through it. Shown/hidden by the checkbox adding/removing it from the
-   DataSet (LiveTimeline.tsx) — not by a CSS rule, so no `show-projection`
-   gate needed here. */
-.timeline-host .vis-item.vis-range.ts-projection-behind {
-  /* Purely decorative — exists only to hold space in vis-timeline's stacking
-     layout. No hover, no click, no cursor change, no selection outline. */
-  pointer-events: none;
-  cursor: default;
-  background-color: transparent;
+.timeline-host.show-projection .vis-item.vis-range.has-projection-behind::after {
+  display: block;
+  left: var(--projection-ratio, 100%);
+  right: 0;
   background-image: repeating-linear-gradient(
     45deg,
     rgba(220, 38, 38, 0.35) 0 4px,
     rgba(220, 38, 38, 0.15) 4px 8px
   );
-  box-shadow: none;
   border-radius: 0 10px 10px 0;
 }
 

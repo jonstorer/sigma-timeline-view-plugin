@@ -739,12 +739,15 @@ describe('resolveProjection', () => {
   // A 5-day display span: Mon May 4 -> Sat May 9, 2026.
   const span = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) }
 
-  test('projected later than the stored end: a "behind" ghost range from the stored end to the projection', () => {
-    // Projected last day Mon May 11 -> display end Tue May 12.
+  test('projected later than the stored end: a "behind" overlay with the widened display end', () => {
+    // Projected last day Mon May 11 -> display end Tue May 12. Widened box is
+    // Mon May 4 -> Tue May 12 (8 days); the real 5-day portion is 62.5% of it.
     expect(resolveProjection(span, '2026-05-11')).toEqual({
       kind: 'behind',
-      start: new Date(2026, 4, 9),
-      end: new Date(2026, 4, 12),
+      className: 'has-projection-behind',
+      style: '--projection-ratio: 62.5%;',
+      displayEnd: new Date(2026, 4, 12),
+      realRatio: 0.625,
     })
   })
 
@@ -778,7 +781,7 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     projectedEndColumn: 'projected_col',
   }
 
-  test('a row projected to slip gets a separate, non-interactive behind-schedule ghost range', () => {
+  test('a row projected to slip gets the behind-schedule class/style on the item itself, plus its widened end', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'], // display end Sat May 9
@@ -786,26 +789,16 @@ describe('buildItemsAndGroups projected-end overlay', () => {
       projected_col: ['2026-05-11'], // display end Tue May 12
     }
     const result = buildItemsAndGroups(config, data)
-    // The real item is untouched — no overlay class/style baked into it.
-    expect(result.items[0].className).toBeUndefined()
-    expect(result.items[0].style).toBeUndefined()
-    // The ghost is a real range item (participates in stack, unlike a
-    // `background` item) so vis-timeline bumps a later same-lane item out of
-    // its way instead of letting the overrun visually run through it.
-    expect(result.projectionItems).toEqual([
-      expect.objectContaining({
-        id: 'r1__projection',
-        start: new Date(2026, 4, 9),
-        end: new Date(2026, 4, 12),
-        type: 'range',
-        className: 'ts-projection-behind',
-        editable: false,
-        selectable: false,
-      }),
-    ])
+    // The real item's own start/end are untouched (unwidened) — widening is
+    // applied by the caller (LiveTimeline), conditionally on the toggle.
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 4))
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 9))
+    expect(result.items[0].className).toBe('has-projection-behind')
+    expect(result.items[0].style).toContain('--projection-ratio: 62.5%;')
+    expect(result.widenedByItemId.get('r1')).toEqual({ end: new Date(2026, 4, 12) })
   })
 
-  test('a row projected to finish early gets the ahead-of-schedule overlay', () => {
+  test('a row projected to finish early gets the ahead-of-schedule overlay, and no widened end', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -814,6 +807,7 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     }
     const result = buildItemsAndGroups(config, data)
     expect(result.items[0].className).toBe('has-projection-ahead')
+    expect(result.widenedByItemId.has('r1')).toBe(false)
   })
 
   test('the ahead overlay combines with an existing has-progress class rather than overwriting it', () => {
@@ -832,7 +826,54 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     expect(result.items[0].style).toContain('--projection-ratio: 40%;')
   })
 
-  test('no projectedEndColumn configured: no overlay class/style and no ghost', () => {
+  test('the behind overlay also combines with an existing has-progress class', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, progressColumn: 'progress_col' },
+      { ...data, progress_col: [0.5] },
+    )
+    expect(result.items[0].className).toBe('has-progress has-projection-behind')
+    expect(result.items[0].style).toContain('--progress: 50%;')
+    expect(result.items[0].style).toContain('--projection-ratio: 62.5%;')
+  })
+
+  test('widenedByItemId rescales the progress fill so its absolute position stays anchored', () => {
+    // The fill is a % of the item's own (always-visible) width. Widening the
+    // box to include the overrun without rescaling would shrink the fill's
+    // absolute position even though the progress value didn't change -
+    // 50% * 62.5% (the real portion's share of the widened box) = 31.25%.
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, progressColumn: 'progress_col' },
+      { ...data, progress_col: [0.5] },
+    )
+    const widened = result.widenedByItemId.get('r1')
+    expect(widened?.style).toContain('--progress: 31.25%;')
+    expect(widened?.style).toContain('--projection-ratio: 62.5%;')
+  })
+
+  test('widenedByItemId has no style override when the item has no progress value', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.widenedByItemId.get('r1')?.style).toBeUndefined()
+  })
+
+  test('no projectedEndColumn configured: no overlay class/style and no widened end', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -844,7 +885,7 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     )
     expect(result.items[0].className).toBeUndefined()
     expect(result.items[0].style).toBeUndefined()
-    expect(result.projectionItems).toEqual([])
+    expect(result.widenedByItemId.size).toBe(0)
   })
 
   test('an unparseable projected-end cell leaves the item without an overlay', () => {
@@ -856,7 +897,7 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     }
     const result = buildItemsAndGroups(config, data)
     expect(result.items[0].className).toBeUndefined()
-    expect(result.projectionItems).toEqual([])
+    expect(result.widenedByItemId.size).toBe(0)
   })
 })
 

@@ -7,6 +7,7 @@ import type {
   ItemVisual,
   ParsedGroupCell,
   TimelineConfig,
+  WidenedProjection,
 } from './types'
 
 export function parseGroupCell(raw: unknown): ParsedGroupCell {
@@ -123,22 +124,29 @@ export function parseProgress(raw: unknown): number | null {
 /**
  * Resolve a row's "projected completion" against its stored span.
  *
- * The two directions need fundamentally different treatment:
+ * Earlier builds tried two different mechanisms for the two directions (a
+ * separate `type:'range'` ghost item for "behind", so vis-timeline's stacking
+ * would bump a colliding sibling out of the way). That worked for collision
+ * avoidance but vis-timeline's stacking then free-floats the ghost to
+ * whatever row is open at its time slot — NOT necessarily its own item's row
+ * — so the ghost visually detached from the bar it belonged to whenever the
+ * lane held other items.
  *
- *  - AHEAD (projected earlier than the stored end) never extends past the
- *    bar's own footprint, so vis-timeline's stacking already accounts for it
- *    correctly via the item's real start/end. It's rendered as pure CSS — a
- *    `--projection-ratio` custom property (a percentage of the item's own
- *    width, so it scales at any zoom level) plus a `has-projection-ahead`
- *    class, gated behind the header checkbox's `show-projection` class on the
- *    host (see App.css). Toggling it touches no DataSet.
- *  - BEHIND (projected later) extends past the bar, into territory
- *    vis-timeline's stacking algorithm doesn't know is "occupied" — a long
- *    enough overrun can visually collide with a later item vis placed on the
- *    same row. This can only be fixed by giving vis-timeline something real
- *    to stack against, so it's a separate `type: 'range'` ghost item (see
- *    `buildItemsAndGroups`), not CSS. Toggling it genuinely adds/removes that
- *    item from the DataSet.
+ * Both directions are now one mechanism: CSS on the item itself.
+ *
+ *  - AHEAD (projected earlier) never extends past the bar's own footprint, so
+ *    it's just a `--projection-ratio` custom property (percentage of the
+ *    item's own width, scales at any zoom level) plus `has-projection-ahead`.
+ *  - BEHIND (projected later) reports `displayEnd`, the WIDENED end the
+ *    caller should substitute for the item's real end while the projection
+ *    toggle is on (see `buildItemsAndGroups` / `LiveTimeline`'s
+ *    `widenedByItemId`). Widening the actual rendered item — rather than
+ *    adding a sibling — is what makes vis-timeline's stacking treat the
+ *    overrun as part of this item's own footprint: there's nothing to
+ *    misalign because there's only one box, and it naturally bumps a
+ *    colliding sibling for free, with no custom packing logic needed.
+ *    `--projection-ratio` here marks where the real end falls within that
+ *    widened box (the solid portion), not an absolute offset.
  *
  * Returns null when there's no value, it doesn't parse, or the projection
  * lands exactly on the stored end (on track, nothing to show).
@@ -148,7 +156,19 @@ export function resolveProjection(
   rawProjectedEnd: unknown,
 ):
   | { kind: 'ahead'; className: string; style: string }
-  | { kind: 'behind'; start: Date; end: Date }
+  | {
+      kind: 'behind'
+      className: string
+      style: string
+      displayEnd: Date
+      /** Fraction (0–1) of the widened box that's the real (unwidened)
+       * portion — i.e. `--projection-ratio` / 100. Exposed separately so the
+       * caller can rescale anything else expressed as a % of the item's own
+       * width (e.g. the progress fill) by the same factor: widening the box
+       * without rescaling would shrink that fill's *absolute* position even
+       * though the underlying progress value didn't change. */
+      realRatio: number
+    }
   | null {
   if (rawProjectedEnd == null) return null
   const projectedDay = parseCellDate(rawProjectedEnd)
@@ -158,12 +178,20 @@ export function resolveProjection(
   const startMs = span.start.getTime()
   const endMs = span.end.getTime()
   const projMs = projectedDisplayEnd.getTime()
-  const durationMs = endMs - startMs // > 0: dayBoundDisplaySpan enforces a 1-day minimum
 
   if (projMs === endMs) return null
   if (projMs > endMs) {
-    return { kind: 'behind', start: span.end, end: projectedDisplayEnd }
+    const widenedDurationMs = projMs - startMs
+    const realRatio = (endMs - startMs) / widenedDurationMs
+    return {
+      kind: 'behind',
+      className: 'has-projection-behind',
+      style: `--projection-ratio: ${realRatio * 100}%;`,
+      displayEnd: projectedDisplayEnd,
+      realRatio,
+    }
   }
+  const durationMs = endMs - startMs // > 0: dayBoundDisplaySpan enforces a 1-day minimum
   const ratio = ((projMs - startMs) / durationMs) * 100
   return {
     kind: 'ahead',
@@ -213,7 +241,7 @@ export function buildItemsAndGroups(
 
   const empty = (): BuildResult => ({
     items: [],
-    projectionItems: [],
+    widenedByItemId: new Map(),
     groups: [],
     visuals,
     rowIdByItemId,
@@ -256,7 +284,7 @@ export function buildItemsAndGroups(
 
   const rowCount = starts.length
   const items: DataItem[] = []
-  const projectionItems: DataItem[] = []
+  const widenedByItemId = new Map<string, WidenedProjection>()
   const groupTree = new Map<string, GroupNode>()
 
   const registerPath = (path: GroupPath) => {
@@ -292,7 +320,6 @@ export function buildItemsAndGroups(
     const projection = projectedEndCol
       ? resolveProjection(span, projectedEnds[i])
       : null
-    const aheadOverlay = projection?.kind === 'ahead' ? projection : null
     // The item look is CSS-driven (see App.css). Hand the highlight color and
     // progress to the stylesheet as custom properties; `has-progress` gates the
     // progress fill so bars without a value stay solid.
@@ -300,12 +327,13 @@ export function buildItemsAndGroups(
     if (highlightColor) styleParts.push(`--item-color: ${highlightColor};`)
     const pct =
       progress != null && progress > 0 ? Math.round(progress * 100) : null
+    const progressPartIndex = pct != null ? styleParts.length : -1
     if (pct != null) styleParts.push(`--progress: ${pct}%;`)
-    if (aheadOverlay) styleParts.push(aheadOverlay.style)
+    if (projection) styleParts.push(projection.style)
     const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
     const classNames = [
       pct != null ? 'has-progress' : null,
-      aheadOverlay?.className ?? null,
+      projection?.className ?? null,
     ].filter((c): c is string => c != null)
     const className = classNames.length > 0 ? classNames.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
@@ -333,21 +361,29 @@ export function buildItemsAndGroups(
         ...(style ? { style } : {}),
         ...(className ? { className } : {}),
       })
-      // A real, separate, non-interactive item (not CSS) — see
-      // `resolveProjection`'s doc comment for why: it needs to participate in
-      // `stack` so vis-timeline bumps a later same-lane item out of its way
-      // instead of letting the overrun run through it.
+      // The caller substitutes this for the item's real end/style while the
+      // projection toggle is on — see `resolveProjection`'s doc comment for
+      // why widening the item itself (not a sibling) is what makes
+      // vis-timeline's stacking treat the overrun as this item's own
+      // footprint, with nothing to misalign. The style override only exists
+      // when there's a progress fill to rescale — the fill is a % of the
+      // item's own (always-visible) width, so widening without rescaling
+      // would shrink its absolute position even though the progress value
+      // didn't change. (--projection-ratio itself doesn't need this: it's
+      // gated behind the `show-projection` class, so it's inert in the base
+      // style — only the always-visible progress fill needs a toggle-aware
+      // variant.)
       if (projection?.kind === 'behind') {
-        projectionItems.push({
-          id: `${itemId}__projection`,
-          ...(group ? { group } : {}),
-          content: '',
-          start: projection.start,
-          end: projection.end,
-          type: 'range',
-          className: 'ts-projection-behind',
-          editable: false,
-          selectable: false,
+        const widenedStyleParts =
+          progressPartIndex === -1
+            ? null
+            : styleParts.with(
+                progressPartIndex,
+                `--progress: ${pct! * projection.realRatio}%;`,
+              )
+        widenedByItemId.set(itemId, {
+          end: projection.displayEnd,
+          ...(widenedStyleParts ? { style: widenedStyleParts.join(' ') } : {}),
         })
       }
     }
@@ -398,7 +434,7 @@ export function buildItemsAndGroups(
 
   return {
     items,
-    projectionItems,
+    widenedByItemId,
     groups,
     visuals,
     rowIdByItemId,
