@@ -237,7 +237,20 @@ export function LiveTimeline({
         // `item.vertical / 2` at the bottom, so a small vertical left items
         // flush against the lane bottom. Bump vertical for a real bottom gap
         // (also widens spacing between stacked items, the same knob).
-        item: { vertical: 24, horizontal: 10 },
+        item: {
+          vertical: 24,
+          // vis-timeline pads every item's *effective* width by this amount
+          // when deciding whether two items can share a stacking row (see
+          // performStacking in vis-timeline's source) — not just a visual
+          // gap. A behind-schedule projection ghost starts with zero gap from
+          // its own item's end by design (it's meant to look contiguous), so
+          // any margin here forces it onto a separate row even though
+          // nothing actually overlaps. Near-zero keeps two genuinely distinct
+          // back-to-back tasks visually touching rather than gapped, which is
+          // what makes the ghost read as a continuation instead of a
+          // disconnected block one row down.
+          horizontal: 1,
+        },
         axis: 24,
       },
       verticalScroll: true,
