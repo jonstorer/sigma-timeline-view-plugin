@@ -1,5 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
-import { dayBoundDisplaySpan } from './weekSpan'
+import { addDays, dayBoundDisplaySpan, parseCellDate } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -120,6 +120,50 @@ export function parseProgress(raw: unknown): number | null {
   return Math.min(1, Math.max(0, n))
 }
 
+/**
+ * CSS hook for the "projected completion" overlay: a dashed extension past
+ * the bar when the projection lands later than the stored end, or a marker
+ * line inside the bar when it lands earlier. `--projection-ratio` is a
+ * percentage of the item's own (start -> end) width rather than an absolute
+ * offset, so it scales correctly at any zoom level — the bar and its overlay
+ * share the same linear time axis, so a ratio of the bar's rendered width
+ * always corresponds to the right number of days. See the consuming rules in
+ * App.css (`.has-projection-behind` / `.has-projection-ahead`), which only
+ * take effect while the header checkbox adds `show-projection` to the host —
+ * this keeps toggling the checkbox a pure CSS change, no DataSet churn.
+ *
+ * Returns null when there's no value, it doesn't parse, or the projection
+ * lands exactly on the stored end (on track, nothing to show).
+ */
+export function projectedEndOverlay(
+  span: { start: Date; end: Date },
+  rawProjectedEnd: unknown,
+): { className: string; style: string } | null {
+  if (rawProjectedEnd == null) return null
+  const projectedDay = parseCellDate(rawProjectedEnd)
+  if (!projectedDay) return null
+  const projectedDisplayEnd = addDays(projectedDay, 1)
+
+  const startMs = span.start.getTime()
+  const endMs = span.end.getTime()
+  const projMs = projectedDisplayEnd.getTime()
+  const durationMs = endMs - startMs // > 0: dayBoundDisplaySpan enforces a 1-day minimum
+
+  if (projMs === endMs) return null
+  if (projMs > endMs) {
+    const ratio = ((projMs - endMs) / durationMs) * 100
+    return {
+      className: 'has-projection-behind',
+      style: `--projection-ratio: ${ratio}%;`,
+    }
+  }
+  const ratio = ((projMs - startMs) / durationMs) * 100
+  return {
+    className: 'has-projection-ahead',
+    style: `--projection-ratio: ${ratio}%;`,
+  }
+}
+
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -178,6 +222,7 @@ export function buildItemsAndGroups(
   const idCol = config.idColumn
   const highlightCol = config.highlightColorColumn
   const progressCol = config.progressColumn
+  const projectedEndCol = config.projectedEndColumn
   const pillCol = config.pillLabelColumn
   const pillColorCol = config.pillColorColumn
   const linkCol = config.linkColumn
@@ -194,6 +239,7 @@ export function buildItemsAndGroups(
   const ids = idCol ? (data[idCol] ?? []) : []
   const highlights = highlightCol ? (data[highlightCol] ?? []) : []
   const progresses = progressCol ? (data[progressCol] ?? []) : []
+  const projectedEnds = projectedEndCol ? (data[projectedEndCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
   const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
   const links = linkCol ? (data[linkCol] ?? []) : []
@@ -233,6 +279,9 @@ export function buildItemsAndGroups(
 
     const highlightColor = highlightCol ? String(highlights[i] ?? '').trim() : ''
     const progress = progressCol ? parseProgress(progresses[i]) : null
+    const overlay = projectedEndCol
+      ? projectedEndOverlay(span, projectedEnds[i])
+      : null
     // The item look is CSS-driven (see App.css). Hand the highlight color and
     // progress to the stylesheet as custom properties; `has-progress` gates the
     // progress fill so bars without a value stay solid.
@@ -241,8 +290,13 @@ export function buildItemsAndGroups(
     const pct =
       progress != null && progress > 0 ? Math.round(progress * 100) : null
     if (pct != null) styleParts.push(`--progress: ${pct}%;`)
+    if (overlay) styleParts.push(overlay.style)
     const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
-    const className = pct != null ? 'has-progress' : undefined
+    const classNames = [
+      pct != null ? 'has-progress' : null,
+      overlay?.className ?? null,
+    ].filter((c): c is string => c != null)
+    const className = classNames.length > 0 ? classNames.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''

@@ -67,6 +67,16 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'projectedEndColumn',
+    type: 'column',
+    label:
+      'Projected end date column (datetime, optional — compute this in Sigma; shows a projection overlay when the header checkbox is on)',
+    source: SOURCE,
+    allowedTypes: ['datetime'],
+    allowMultiple: false,
+  },
+
+  {
     name: 'pillLabelColumn',
     type: 'column',
     label: 'Pill label column (left side text, optional)',

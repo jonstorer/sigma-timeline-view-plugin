@@ -171,6 +171,44 @@ slot at it.
 | `linkColumn` | column (url/text) | Per-row URL. When present, a small link glyph sits at the left of the item (before the pill) and opens the URL in a new tab. Left-anchored so it stays visible as a wide item scrolls. Rows with a blank value show no link. |
 | `descriptionColumn` | column | Shown in the hover card when the item is hovered. |
 
+### Projected completion (optional)
+
+Wire this slot to show whether an item is tracking ahead of or behind its
+stated end date. The plugin doesn't compute the projection itself — that's
+deliberate: you own the algorithm in Sigma (a calculated column), and the
+plugin only renders whatever date it produces. This keeps the projection
+formula a workbook-level decision you can change without a plugin deploy.
+
+| Slot | Type | Purpose |
+|---|---|---|
+| `projectedEndColumn` | column (datetime) | Per-row projected completion date, computed in Sigma. |
+
+A header checkbox ("Show projected completion") only appears once this slot
+is configured, and toggles the overlay on/off. It's a plain UI toggle — it
+doesn't persist across reloads and isn't wired to a Sigma variable.
+
+**Visual.** Compares the projected date against the item's own stored end:
+
+- **Projected later** (behind schedule): a dashed red extension past the
+  bar's right edge, out to the projected date.
+- **Projected earlier** (ahead of schedule): a thin green marker line inside
+  the bar, at the projected date.
+- **Projected on the same day**: no overlay — on track.
+
+**Example formula** (pace extrapolation — "at the rate you've been going,
+you'll finish on this date"):
+
+```
+DateAdd("day",
+  DateDiff("day", [Start], Today()) / [Progress],
+  [Start]
+)
+```
+
+Undefined when `[Progress]` is 0 (no pace yet) — guard for that in your
+formula (e.g. return `[End]` or null) so the column doesn't produce a
+divide-by-zero result for not-yet-started items.
+
 ### Multi-level grouping
 
 The **Group by** slot accepts an ordered list of columns. The first column is

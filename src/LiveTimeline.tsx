@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DataSet } from 'vis-data'
 import {
   Timeline,
@@ -137,6 +137,11 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
+  // Whether the projected-completion overlay is shown. Purely a CSS toggle
+  // (see the `show-projection` class below and App.css) — the overlay's
+  // geometry is already baked into each item's style/className in
+  // buildItems.ts, so flipping this never touches vis-timeline's DataSet.
+  const [showProjection, setShowProjection] = useState(false)
   // Whether groupsDs is currently the Timeline's active groups source. Lets
   // the sync effect below skip re-calling setGroups() when nothing about
   // grouped-vs-ungrouped changed — see that effect for why it matters.
@@ -520,6 +525,16 @@ export function LiveTimeline({
           </p>
         </div>
         <div className="timeline-toolbar">
+          {config?.projectedEndColumn && (
+            <label className="timeline-projection-toggle">
+              <input
+                type="checkbox"
+                checked={showProjection}
+                onChange={(e) => setShowProjection(e.target.checked)}
+              />
+              Show projected completion
+            </label>
+          )}
           <button
             type="button"
             className="timeline-zoom-btn"
@@ -540,7 +555,10 @@ export function LiveTimeline({
           </button>
         </div>
       </header>
-      <div ref={containerRef} className="timeline-host" />
+      <div
+        ref={containerRef}
+        className={`timeline-host${showProjection ? ' show-projection' : ''}`}
+      />
     </div>
   )
 }

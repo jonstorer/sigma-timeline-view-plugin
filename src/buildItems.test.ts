@@ -7,6 +7,7 @@ import {
   parseGroupId,
   parseProgress,
   pathToGroupId,
+  projectedEndOverlay,
   safeId,
 } from './buildItems'
 
@@ -731,6 +732,113 @@ describe('parseProgress', () => {
     expect(parseProgress(undefined)).toBeNull()
     expect(parseProgress('')).toBeNull()
     expect(parseProgress('n/a')).toBeNull()
+  })
+})
+
+describe('projectedEndOverlay', () => {
+  // A 5-day display span: Mon May 4 -> Sat May 9, 2026.
+  const span = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) }
+
+  test('projected later than the stored end: a "behind" overlay sized to the overrun', () => {
+    // Projected last day Mon May 11 -> display end Tue May 12 -> 3 days past
+    // the stored end, which is 60% of the bar's own 5-day width.
+    expect(projectedEndOverlay(span, '2026-05-11')).toEqual({
+      className: 'has-projection-behind',
+      style: '--projection-ratio: 60%;',
+    })
+  })
+
+  test('projected earlier than the stored end: an "ahead" overlay positioned inside the bar', () => {
+    // Projected last day Tue May 5 -> display end Wed May 6 -> 2 days into
+    // the bar's own 5-day width, i.e. 40% from the start.
+    expect(projectedEndOverlay(span, '2026-05-05')).toEqual({
+      className: 'has-projection-ahead',
+      style: '--projection-ratio: 40%;',
+    })
+  })
+
+  test('projected exactly on the stored end: on track, no overlay', () => {
+    // Projected last day Fri May 8 -> display end Sat May 9 === span.end.
+    expect(projectedEndOverlay(span, '2026-05-08')).toBeNull()
+  })
+
+  test('no value, or an unparseable value, yields no overlay', () => {
+    expect(projectedEndOverlay(span, null)).toBeNull()
+    expect(projectedEndOverlay(span, undefined)).toBeNull()
+    expect(projectedEndOverlay(span, 'garbage')).toBeNull()
+  })
+})
+
+describe('buildItemsAndGroups projected-end overlay', () => {
+  const config = {
+    startDate: 'start_col',
+    endDate: 'end_col',
+    idColumn: 'id_col',
+    projectedEndColumn: 'projected_col',
+  }
+
+  test('a row projected to slip gets the behind-schedule overlay', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'], // display end Sat May 9
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'], // display end Tue May 12
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBe('has-projection-behind')
+    expect(result.items[0].style).toContain('--projection-ratio: 60%;')
+  })
+
+  test('a row projected to finish early gets the ahead-of-schedule overlay', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-05'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBe('has-projection-ahead')
+  })
+
+  test('combines with an existing has-progress class rather than overwriting it', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, progressColumn: 'progress_col' },
+      { ...data, progress_col: [0.5] },
+    )
+    expect(result.items[0].className).toBe('has-progress has-projection-behind')
+    expect(result.items[0].style).toContain('--progress: 50%;')
+    expect(result.items[0].style).toContain('--projection-ratio: 60%;')
+  })
+
+  test('no projectedEndColumn configured: no overlay class or style', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' },
+      data,
+    )
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.items[0].style).toBeUndefined()
+  })
+
+  test('an unparseable projected-end cell leaves the item without an overlay', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['garbage'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBeUndefined()
   })
 })
 

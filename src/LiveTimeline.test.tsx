@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 
 // Mock vis-timeline's Timeline constructor so we don't drive heavy DOM work
 // in jsdom. We just need the LiveTimeline component to render and the empty-
@@ -177,6 +177,66 @@ describe('LiveTimeline', () => {
       <LiveTimeline config={config} data={data} />,
     )
     expect(getByText(/1 item across 1 lane\./i)).toBeInTheDocument()
+  })
+})
+
+describe('LiveTimeline projection toggle', () => {
+  test('hides the checkbox when no projectedEndColumn is configured', () => {
+    const { queryByLabelText, container } = render(
+      <LiveTimeline config={oneRowConfig} data={oneRowData} />,
+    )
+    expect(queryByLabelText(/show projected completion/i)).not.toBeInTheDocument()
+    expect(container.querySelector('.timeline-host')).not.toHaveClass(
+      'show-projection',
+    )
+  })
+
+  test('shows the checkbox, unchecked by default, when projectedEndColumn is configured', () => {
+    const { getByLabelText, container } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-11'] }}
+      />,
+    )
+    const checkbox = getByLabelText(/show projected completion/i)
+    expect(checkbox).not.toBeChecked()
+    expect(container.querySelector('.timeline-host')).not.toHaveClass(
+      'show-projection',
+    )
+  })
+
+  test('toggling the checkbox only flips a CSS class — no DataSet is touched', () => {
+    const { getByLabelText, container } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-11'] }}
+      />,
+    )
+    const host = container.querySelector('.timeline-host')!
+    const checkbox = getByLabelText(/show projected completion/i)
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    const updateSpy = vi.spyOn(DataSet.prototype, 'update')
+    const clearSpy = vi.spyOn(DataSet.prototype, 'clear')
+
+    fireEvent.click(checkbox)
+    expect(checkbox).toBeChecked()
+    expect(host).toHaveClass('show-projection')
+
+    fireEvent.click(checkbox)
+    expect(checkbox).not.toBeChecked()
+    expect(host).not.toHaveClass('show-projection')
+
+    expect(addSpy).not.toHaveBeenCalled()
+    expect(removeSpy).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(clearSpy).not.toHaveBeenCalled()
+
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+    updateSpy.mockRestore()
+    clearSpy.mockRestore()
   })
 })
 
