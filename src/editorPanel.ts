@@ -49,6 +49,15 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
+    name: 'projectedEndColumn',
+    type: 'column',
+    label: 'Projected end date',
+    source: SOURCE,
+    allowedTypes: ['datetime'],
+    allowMultiple: false,
+  },
+
+  {
     name: 'highlightColorColumn',
     type: 'column',
     label: 'Highlight color column (#hex, optional)',
@@ -60,7 +69,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'progressColumn',
     type: 'column',
-    label: 'Progress column (0–1 fraction, fills the bar, optional)',
+    label: 'Progress column (0–1 fraction, optional)',
     source: SOURCE,
     allowedTypes: ['number', 'integer'],
     allowMultiple: false,
@@ -86,7 +95,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'linkColumn',
     type: 'column',
-    label: 'Link URL column (opens in a new tab from the right of the item, optional)',
+    label: 'Link URL column (arrow that opens in a new tab, optional)',
     source: SOURCE,
     allowMultiple: false,
   },

@@ -1,5 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
-import { dayBoundDisplaySpan } from './weekSpan'
+import { addDays, dayBoundDisplaySpan, parseCellDate } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -120,6 +120,58 @@ export function parseProgress(raw: unknown): number | null {
   return Math.min(1, Math.max(0, n))
 }
 
+/**
+ * Resolve a row's "projected completion" against its stored span.
+ *
+ * The two directions need fundamentally different treatment:
+ *
+ *  - AHEAD (projected earlier than the stored end) never extends past the
+ *    bar's own footprint, so vis-timeline's stacking already accounts for it
+ *    correctly via the item's real start/end. It's rendered as pure CSS — a
+ *    `--projection-ratio` custom property (a percentage of the item's own
+ *    width, so it scales at any zoom level) plus a `has-projection-ahead`
+ *    class, gated behind the header checkbox's `show-projection` class on the
+ *    host (see App.css). Toggling it touches no DataSet.
+ *  - BEHIND (projected later) extends past the bar, into territory
+ *    vis-timeline's stacking algorithm doesn't know is "occupied" — a long
+ *    enough overrun can visually collide with a later item vis placed on the
+ *    same row. This can only be fixed by giving vis-timeline something real
+ *    to stack against, so it's a separate `type: 'range'` ghost item (see
+ *    `buildItemsAndGroups`), not CSS. Toggling it genuinely adds/removes that
+ *    item from the DataSet.
+ *
+ * Returns null when there's no value, it doesn't parse, or the projection
+ * lands exactly on the stored end (on track, nothing to show).
+ */
+export function resolveProjection(
+  span: { start: Date; end: Date },
+  rawProjectedEnd: unknown,
+):
+  | { kind: 'ahead'; className: string; style: string }
+  | { kind: 'behind'; start: Date; end: Date }
+  | null {
+  if (rawProjectedEnd == null) return null
+  const projectedDay = parseCellDate(rawProjectedEnd)
+  if (!projectedDay) return null
+  const projectedDisplayEnd = addDays(projectedDay, 1)
+
+  const startMs = span.start.getTime()
+  const endMs = span.end.getTime()
+  const projMs = projectedDisplayEnd.getTime()
+  const durationMs = endMs - startMs // > 0: dayBoundDisplaySpan enforces a 1-day minimum
+
+  if (projMs === endMs) return null
+  if (projMs > endMs) {
+    return { kind: 'behind', start: span.end, end: projectedDisplayEnd }
+  }
+  const ratio = ((projMs - startMs) / durationMs) * 100
+  return {
+    kind: 'ahead',
+    className: 'has-projection-ahead',
+    style: `--projection-ratio: ${ratio}%;`,
+  }
+}
+
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -161,6 +213,7 @@ export function buildItemsAndGroups(
 
   const empty = (): BuildResult => ({
     items: [],
+    projectionItems: [],
     groups: [],
     visuals,
     rowIdByItemId,
@@ -178,6 +231,7 @@ export function buildItemsAndGroups(
   const idCol = config.idColumn
   const highlightCol = config.highlightColorColumn
   const progressCol = config.progressColumn
+  const projectedEndCol = config.projectedEndColumn
   const pillCol = config.pillLabelColumn
   const pillColorCol = config.pillColorColumn
   const linkCol = config.linkColumn
@@ -194,6 +248,7 @@ export function buildItemsAndGroups(
   const ids = idCol ? (data[idCol] ?? []) : []
   const highlights = highlightCol ? (data[highlightCol] ?? []) : []
   const progresses = progressCol ? (data[progressCol] ?? []) : []
+  const projectedEnds = projectedEndCol ? (data[projectedEndCol] ?? []) : []
   const pills = pillCol ? (data[pillCol] ?? []) : []
   const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
   const links = linkCol ? (data[linkCol] ?? []) : []
@@ -201,6 +256,7 @@ export function buildItemsAndGroups(
 
   const rowCount = starts.length
   const items: DataItem[] = []
+  const projectionItems: DataItem[] = []
   const groupTree = new Map<string, GroupNode>()
 
   const registerPath = (path: GroupPath) => {
@@ -233,6 +289,10 @@ export function buildItemsAndGroups(
 
     const highlightColor = highlightCol ? String(highlights[i] ?? '').trim() : ''
     const progress = progressCol ? parseProgress(progresses[i]) : null
+    const projection = projectedEndCol
+      ? resolveProjection(span, projectedEnds[i])
+      : null
+    const aheadOverlay = projection?.kind === 'ahead' ? projection : null
     // The item look is CSS-driven (see App.css). Hand the highlight color and
     // progress to the stylesheet as custom properties; `has-progress` gates the
     // progress fill so bars without a value stay solid.
@@ -241,8 +301,13 @@ export function buildItemsAndGroups(
     const pct =
       progress != null && progress > 0 ? Math.round(progress * 100) : null
     if (pct != null) styleParts.push(`--progress: ${pct}%;`)
+    if (aheadOverlay) styleParts.push(aheadOverlay.style)
     const style = styleParts.length > 0 ? styleParts.join(' ') : undefined
-    const className = pct != null ? 'has-progress' : undefined
+    const classNames = [
+      pct != null ? 'has-progress' : null,
+      aheadOverlay?.className ?? null,
+    ].filter((c): c is string => c != null)
+    const className = classNames.length > 0 ? classNames.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''
@@ -268,6 +333,23 @@ export function buildItemsAndGroups(
         ...(style ? { style } : {}),
         ...(className ? { className } : {}),
       })
+      // A real, separate, non-interactive item (not CSS) — see
+      // `resolveProjection`'s doc comment for why: it needs to participate in
+      // `stack` so vis-timeline bumps a later same-lane item out of its way
+      // instead of letting the overrun run through it.
+      if (projection?.kind === 'behind') {
+        projectionItems.push({
+          id: `${itemId}__projection`,
+          ...(group ? { group } : {}),
+          content: '',
+          start: projection.start,
+          end: projection.end,
+          type: 'range',
+          className: 'ts-projection-behind',
+          editable: false,
+          selectable: false,
+        })
+      }
     }
 
     if (ungrouped) {
@@ -316,6 +398,7 @@ export function buildItemsAndGroups(
 
   return {
     items,
+    projectionItems,
     groups,
     visuals,
     rowIdByItemId,

@@ -43,6 +43,17 @@
   flex: 0 0 auto;
 }
 
+.timeline-projection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 10px;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+}
+
 .timeline-zoom-btn {
   width: 28px;
   height: 28px;
@@ -294,6 +305,54 @@
 }
 .timeline-host .vis-item.vis-range .vis-item-overflow {
   overflow: hidden;
+}
+
+/* Projected-completion overlay. Two different mechanisms for two different
+   risks — see resolveProjection's doc comment in buildItems.ts:
+
+   AHEAD (projected earlier than stored end) never leaves the bar's own
+   footprint, so it's pure CSS: a `--projection-ratio` custom property (a
+   percentage of the item's own width, scales at any zoom level) plus
+   `has-projection-ahead`, gated behind the `show-projection` class the header
+   checkbox adds to `.timeline-host` — toggling it never touches the DataSet. */
+.timeline-host .vis-item.vis-range.has-projection-ahead::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: none;
+  /* Purely decorative — never intercepts a click/hover meant for the real
+     item underneath or around it. */
+  pointer-events: none;
+}
+.timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::after {
+  display: block;
+  left: var(--projection-ratio, 0%);
+  width: 2px;
+  background: #16a34a;
+}
+
+/* BEHIND (projected later) extends past the bar, into territory
+   vis-timeline's stacking doesn't know is occupied — a real `type:'range'`
+   ghost item (see buildItemsAndGroups), non-interactive (editable:false,
+   selectable:false), so it participates in `stack` and vis-timeline bumps a
+   later same-lane item onto its own row instead of letting the overrun run
+   through it. Shown/hidden by the checkbox adding/removing it from the
+   DataSet (LiveTimeline.tsx) — not by a CSS rule, so no `show-projection`
+   gate needed here. */
+.timeline-host .vis-item.vis-range.ts-projection-behind {
+  /* Purely decorative — exists only to hold space in vis-timeline's stacking
+     layout. No hover, no click, no cursor change, no selection outline. */
+  pointer-events: none;
+  cursor: default;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(220, 38, 38, 0.35) 0 4px,
+    rgba(220, 38, 38, 0.15) 4px 8px
+  );
+  box-shadow: none;
+  border-radius: 0 10px 10px 0;
 }
 
 /* Drag handles */

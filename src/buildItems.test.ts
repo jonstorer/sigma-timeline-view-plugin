@@ -7,6 +7,7 @@ import {
   parseGroupId,
   parseProgress,
   pathToGroupId,
+  resolveProjection,
   safeId,
 } from './buildItems'
 
@@ -731,6 +732,131 @@ describe('parseProgress', () => {
     expect(parseProgress(undefined)).toBeNull()
     expect(parseProgress('')).toBeNull()
     expect(parseProgress('n/a')).toBeNull()
+  })
+})
+
+describe('resolveProjection', () => {
+  // A 5-day display span: Mon May 4 -> Sat May 9, 2026.
+  const span = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) }
+
+  test('projected later than the stored end: a "behind" ghost range from the stored end to the projection', () => {
+    // Projected last day Mon May 11 -> display end Tue May 12.
+    expect(resolveProjection(span, '2026-05-11')).toEqual({
+      kind: 'behind',
+      start: new Date(2026, 4, 9),
+      end: new Date(2026, 4, 12),
+    })
+  })
+
+  test('projected earlier than the stored end: an "ahead" CSS overlay positioned inside the bar', () => {
+    // Projected last day Tue May 5 -> display end Wed May 6 -> 2 days into
+    // the bar's own 5-day width, i.e. 40% from the start.
+    expect(resolveProjection(span, '2026-05-05')).toEqual({
+      kind: 'ahead',
+      className: 'has-projection-ahead',
+      style: '--projection-ratio: 40%;',
+    })
+  })
+
+  test('projected exactly on the stored end: on track, no overlay', () => {
+    // Projected last day Fri May 8 -> display end Sat May 9 === span.end.
+    expect(resolveProjection(span, '2026-05-08')).toBeNull()
+  })
+
+  test('no value, or an unparseable value, yields no overlay', () => {
+    expect(resolveProjection(span, null)).toBeNull()
+    expect(resolveProjection(span, undefined)).toBeNull()
+    expect(resolveProjection(span, 'garbage')).toBeNull()
+  })
+})
+
+describe('buildItemsAndGroups projected-end overlay', () => {
+  const config = {
+    startDate: 'start_col',
+    endDate: 'end_col',
+    idColumn: 'id_col',
+    projectedEndColumn: 'projected_col',
+  }
+
+  test('a row projected to slip gets a separate, non-interactive behind-schedule ghost range', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'], // display end Sat May 9
+      id_col: ['r1'],
+      projected_col: ['2026-05-11'], // display end Tue May 12
+    }
+    const result = buildItemsAndGroups(config, data)
+    // The real item is untouched — no overlay class/style baked into it.
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.items[0].style).toBeUndefined()
+    // The ghost is a real range item (participates in stack, unlike a
+    // `background` item) so vis-timeline bumps a later same-lane item out of
+    // its way instead of letting the overrun visually run through it.
+    expect(result.projectionItems).toEqual([
+      expect.objectContaining({
+        id: 'r1__projection',
+        start: new Date(2026, 4, 9),
+        end: new Date(2026, 4, 12),
+        type: 'range',
+        className: 'ts-projection-behind',
+        editable: false,
+        selectable: false,
+      }),
+    ])
+  })
+
+  test('a row projected to finish early gets the ahead-of-schedule overlay', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-05'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBe('has-projection-ahead')
+  })
+
+  test('the ahead overlay combines with an existing has-progress class rather than overwriting it', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['2026-05-05'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, progressColumn: 'progress_col' },
+      { ...data, progress_col: [0.5] },
+    )
+    expect(result.items[0].className).toBe('has-progress has-projection-ahead')
+    expect(result.items[0].style).toContain('--progress: 50%;')
+    expect(result.items[0].style).toContain('--projection-ratio: 40%;')
+  })
+
+  test('no projectedEndColumn configured: no overlay class/style and no ghost', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' },
+      data,
+    )
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.items[0].style).toBeUndefined()
+    expect(result.projectionItems).toEqual([])
+  })
+
+  test('an unparseable projected-end cell leaves the item without an overlay', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      projected_col: ['garbage'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.projectionItems).toEqual([])
   })
 })
 

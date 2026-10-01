@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 
 // Mock vis-timeline's Timeline constructor so we don't drive heavy DOM work
 // in jsdom. We just need the LiveTimeline component to render and the empty-
@@ -177,6 +177,94 @@ describe('LiveTimeline', () => {
       <LiveTimeline config={config} data={data} />,
     )
     expect(getByText(/1 item across 1 lane\./i)).toBeInTheDocument()
+  })
+})
+
+describe('LiveTimeline projection toggle', () => {
+  test('hides the checkbox when no projectedEndColumn is configured', () => {
+    const { queryByLabelText, container } = render(
+      <LiveTimeline config={oneRowConfig} data={oneRowData} />,
+    )
+    expect(queryByLabelText(/show projected completion/i)).not.toBeInTheDocument()
+    expect(container.querySelector('.timeline-host')).not.toHaveClass(
+      'show-projection',
+    )
+  })
+
+  test('shows the checkbox, unchecked by default, when projectedEndColumn is configured', () => {
+    const { getByLabelText, container } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-11'] }}
+      />,
+    )
+    const checkbox = getByLabelText(/show projected completion/i)
+    expect(checkbox).not.toBeChecked()
+    expect(container.querySelector('.timeline-host')).not.toHaveClass(
+      'show-projection',
+    )
+  })
+
+  test('toggling with an ahead-of-schedule row only flips a CSS class — the real item is untouched', () => {
+    // Weekends resync on every pass of this effect regardless (unrelated
+    // noise — see PR #22), so this scopes its assertion to the real item's
+    // own id rather than asserting zero DataSet calls overall.
+    const { getByLabelText, container } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-05'] }} // ahead of schedule
+      />,
+    )
+    const host = container.querySelector('.timeline-host')!
+    const checkbox = getByLabelText(/show projected completion/i)
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+
+    fireEvent.click(checkbox)
+    expect(checkbox).toBeChecked()
+    expect(host).toHaveClass('show-projection')
+
+    fireEvent.click(checkbox)
+    expect(checkbox).not.toBeChecked()
+    expect(host).not.toHaveClass('show-projection')
+
+    expect(removeSpy).not.toHaveBeenCalledWith('r1')
+    expect(addSpy).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'r1' })]),
+    )
+
+    addSpy.mockRestore()
+    removeSpy.mockRestore()
+  })
+
+  test('toggling with a behind-schedule row adds/removes the projection ghost from the DataSet', () => {
+    // Unlike the ahead case, the behind overlay is a real stacking-aware item
+    // (see resolveProjection), so showing/hiding it genuinely mutates the
+    // DataSet — this is the one case where the checkbox isn't pure CSS.
+    const { getByLabelText } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-11'] }} // behind schedule
+      />,
+    )
+    const checkbox = getByLabelText(/show projected completion/i)
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    fireEvent.click(checkbox)
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'r1__projection' }),
+      ]),
+    )
+    addSpy.mockRestore()
+
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    fireEvent.click(checkbox)
+    expect(removeSpy).toHaveBeenCalledWith(
+      expect.arrayContaining(['r1__projection']),
+    )
+    removeSpy.mockRestore()
   })
 })
 
