@@ -244,12 +244,14 @@ export function LiveTimeline({
           // performStacking in vis-timeline's source) — not just a visual
           // gap. A behind-schedule projection ghost starts with zero gap from
           // its own item's end by design (it's meant to look contiguous), so
-          // any margin here forces it onto a separate row even though
-          // nothing actually overlaps. Near-zero keeps two genuinely distinct
-          // back-to-back tasks visually touching rather than gapped, which is
-          // what makes the ghost read as a continuation instead of a
-          // disconnected block one row down.
-          horizontal: 1,
+          // this must be exactly 0, not "small": performStacking's collision
+          // check has a 0.001px epsilon, so any positive value (even 1px)
+          // still registers a zero-gap touch as a collision and forces the
+          // ghost onto a separate row — confirmed the hard way. Zero is what
+          // makes the ghost read as a continuation instead of a disconnected
+          // block one row down. Trade-off: two genuinely distinct back-to-back
+          // tasks now render touching with no breathing room between them.
+          horizontal: 0,
         },
         axis: 24,
       },
