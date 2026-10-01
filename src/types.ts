@@ -43,6 +43,10 @@ export interface ItemVisual {
 
 export interface BuildResult {
   items: DataItem[]
+  /** Non-interactive "behind schedule" ghost ranges, one per item with an
+   * overrun projection — kept separate so the caller can include/exclude them
+   * based on the projection-toggle state without touching `items`. */
+  projectionItems: DataItem[]
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>

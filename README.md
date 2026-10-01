@@ -190,9 +190,14 @@ doesn't persist across reloads and isn't wired to a Sigma variable.
 **Visual.** Compares the projected date against the item's own stored end:
 
 - **Projected later** (behind schedule): a dashed red extension past the
-  bar's right edge, out to the projected date.
+  bar's right edge, out to the projected date. This is a real (non-draggable)
+  item, not a cosmetic overlay — it participates in the same-lane stacking
+  vis-timeline already does, so a later item in that lane gets bumped onto its
+  own row instead of the overrun visually running through it. This means
+  turning the checkbox on can grow lane heights.
 - **Projected earlier** (ahead of schedule): a thin green marker line inside
-  the bar, at the projected date.
+  the bar, at the projected date. Stays within the bar's own footprint, so it
+  never affects lane height.
 - **Projected on the same day**: no overlay — on track.
 
 **Example formula** (pace extrapolation — "at the rate you've been going,

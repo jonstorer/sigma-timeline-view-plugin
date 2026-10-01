@@ -205,11 +205,14 @@ describe('LiveTimeline projection toggle', () => {
     )
   })
 
-  test('toggling the checkbox only flips a CSS class — no DataSet is touched', () => {
+  test('toggling with an ahead-of-schedule row only flips a CSS class — the real item is untouched', () => {
+    // Weekends resync on every pass of this effect regardless (unrelated
+    // noise — see PR #22), so this scopes its assertion to the real item's
+    // own id rather than asserting zero DataSet calls overall.
     const { getByLabelText, container } = render(
       <LiveTimeline
         config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
-        data={{ ...oneRowData, projected_col: ['2026-05-11'] }}
+        data={{ ...oneRowData, projected_col: ['2026-05-05'] }} // ahead of schedule
       />,
     )
     const host = container.querySelector('.timeline-host')!
@@ -217,8 +220,6 @@ describe('LiveTimeline projection toggle', () => {
 
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
     const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
-    const updateSpy = vi.spyOn(DataSet.prototype, 'update')
-    const clearSpy = vi.spyOn(DataSet.prototype, 'clear')
 
     fireEvent.click(checkbox)
     expect(checkbox).toBeChecked()
@@ -228,15 +229,42 @@ describe('LiveTimeline projection toggle', () => {
     expect(checkbox).not.toBeChecked()
     expect(host).not.toHaveClass('show-projection')
 
-    expect(addSpy).not.toHaveBeenCalled()
-    expect(removeSpy).not.toHaveBeenCalled()
-    expect(updateSpy).not.toHaveBeenCalled()
-    expect(clearSpy).not.toHaveBeenCalled()
+    expect(removeSpy).not.toHaveBeenCalledWith('r1')
+    expect(addSpy).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'r1' })]),
+    )
 
     addSpy.mockRestore()
     removeSpy.mockRestore()
-    updateSpy.mockRestore()
-    clearSpy.mockRestore()
+  })
+
+  test('toggling with a behind-schedule row adds/removes the projection ghost from the DataSet', () => {
+    // Unlike the ahead case, the behind overlay is a real stacking-aware item
+    // (see resolveProjection), so showing/hiding it genuinely mutates the
+    // DataSet — this is the one case where the checkbox isn't pure CSS.
+    const { getByLabelText } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-11'] }} // behind schedule
+      />,
+    )
+    const checkbox = getByLabelText(/show projected completion/i)
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    fireEvent.click(checkbox)
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'r1__projection' }),
+      ]),
+    )
+    addSpy.mockRestore()
+
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    fireEvent.click(checkbox)
+    expect(removeSpy).toHaveBeenCalledWith(
+      expect.arrayContaining(['r1__projection']),
+    )
+    removeSpy.mockRestore()
   })
 })
 

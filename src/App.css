@@ -307,16 +307,14 @@
   overflow: hidden;
 }
 
-/* Projected-completion overlay — purely CSS-driven, gated behind the
-   `show-projection` class the header checkbox adds to `.timeline-host` (see
-   LiveTimeline.tsx), so toggling it never touches vis-timeline's DataSet.
-   `--projection-ratio` and the has-projection-* classes come from
-   buildItems.ts's `projectedEndOverlay`, expressed as a percentage of the
-   item's own width so it scales correctly at any zoom level.
-   `::after` is attached directly to `.vis-item.vis-range`, a sibling of
-   `.vis-item-overflow` above — not a descendant of it — so its own
-   `overflow: hidden` doesn't clip an extension past the bar's right edge. */
-.timeline-host .vis-item.vis-range.has-projection-behind::after,
+/* Projected-completion overlay. Two different mechanisms for two different
+   risks — see resolveProjection's doc comment in buildItems.ts:
+
+   AHEAD (projected earlier than stored end) never leaves the bar's own
+   footprint, so it's pure CSS: a `--projection-ratio` custom property (a
+   percentage of the item's own width, scales at any zoom level) plus
+   `has-projection-ahead`, gated behind the `show-projection` class the header
+   checkbox adds to `.timeline-host` — toggling it never touches the DataSet. */
 .timeline-host .vis-item.vis-range.has-projection-ahead::after {
   content: '';
   position: absolute;
@@ -324,22 +322,30 @@
   bottom: 0;
   display: none;
 }
-.timeline-host.show-projection .vis-item.vis-range.has-projection-behind::after {
-  display: block;
-  left: 100%;
-  width: var(--projection-ratio, 0%);
-  background-image: repeating-linear-gradient(
-    45deg,
-    rgba(220, 38, 38, 0.35) 0 4px,
-    rgba(220, 38, 38, 0.15) 4px 8px
-  );
-  border-radius: 0 10px 10px 0;
-}
 .timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::after {
   display: block;
   left: var(--projection-ratio, 0%);
   width: 2px;
   background: #16a34a;
+}
+
+/* BEHIND (projected later) extends past the bar, into territory
+   vis-timeline's stacking doesn't know is occupied — a real `type:'range'`
+   ghost item (see buildItemsAndGroups), non-interactive (editable:false,
+   selectable:false), so it participates in `stack` and vis-timeline bumps a
+   later same-lane item onto its own row instead of letting the overrun run
+   through it. Shown/hidden by the checkbox adding/removing it from the
+   DataSet (LiveTimeline.tsx) — not by a CSS rule, so no `show-projection`
+   gate needed here. */
+.timeline-host .vis-item.vis-range.ts-projection-behind {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(220, 38, 38, 0.35) 0 4px,
+    rgba(220, 38, 38, 0.15) 4px 8px
+  );
+  box-shadow: none;
+  border-radius: 0 10px 10px 0;
 }
 
 /* Drag handles */

@@ -162,6 +162,7 @@ export function LiveTimeline({
 
   const {
     items,
+    projectionItems,
     groups,
     visuals,
     rowIdByItemId,
@@ -267,9 +268,14 @@ export function LiveTimeline({
       snap: null,
       // Live-drag snapping: keeps the bar visually on Mon->Sat weeks while the
       // user drags, independent of which edge (or the whole item) is moving.
-      // Weekend background bands and end-less items pass through untouched.
+      // Weekend background bands, non-editable items (e.g. a behind-schedule
+      // projection ghost), and end-less items pass through untouched.
       onMoving: (item, callback) => {
-        if (item.type === 'background' || item.end == null) {
+        if (
+          item.type === 'background' ||
+          item.editable === false ||
+          item.end == null
+        ) {
           callback(item)
           return
         }
@@ -494,10 +500,14 @@ export function LiveTimeline({
         groupsAttachedRef.current = hasGroups
       }
 
-      syncDataSet(itemsDs, items, new Set(weekendIdsRef.current))
+      // Behind-schedule ghosts are real stacking-aware items (see
+      // resolveProjection), so showing/hiding them is a genuine DataSet
+      // change, not pure CSS — included here only while the toggle is on.
+      const itemsToSync = showProjection ? [...items, ...projectionItems] : items
+      syncDataSet(itemsDs, itemsToSync, new Set(weekendIdsRef.current))
       syncWeekends()
     })
-  }, [items, groups, syncWeekends])
+  }, [items, projectionItems, groups, syncWeekends, showProjection])
 
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.startDate || !config?.endDate
