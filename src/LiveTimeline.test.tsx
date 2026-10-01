@@ -238,10 +238,11 @@ describe('LiveTimeline projection toggle', () => {
     removeSpy.mockRestore()
   })
 
-  test('toggling with a behind-schedule row adds/removes the projection ghost from the DataSet', () => {
-    // Unlike the ahead case, the behind overlay is a real stacking-aware item
-    // (see resolveProjection), so showing/hiding it genuinely mutates the
-    // DataSet — this is the one case where the checkbox isn't pure CSS.
+  test('toggling with a behind-schedule row widens/unwidens the item\'s own end in the DataSet', () => {
+    // Unlike the ahead case, the behind overlay widens the item's actual
+    // rendered end (see resolveProjection), so showing/hiding it genuinely
+    // mutates the DataSet — this is the one case where the checkbox isn't
+    // pure CSS. It's the SAME item id ('r1'), not a separate ghost.
     const { getByLabelText } = render(
       <LiveTimeline
         config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
@@ -254,17 +255,19 @@ describe('LiveTimeline projection toggle', () => {
     fireEvent.click(checkbox)
     expect(addSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'r1__projection' }),
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
       ]),
     )
     addSpy.mockRestore()
 
-    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    const secondAddSpy = vi.spyOn(DataSet.prototype, 'add')
     fireEvent.click(checkbox)
-    expect(removeSpy).toHaveBeenCalledWith(
-      expect.arrayContaining(['r1__projection']),
+    expect(secondAddSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
+      ]),
     )
-    removeSpy.mockRestore()
+    secondAddSpy.mockRestore()
   })
 })
 
@@ -422,6 +425,41 @@ describe('LiveTimeline drag editing', () => {
         end: new Date(2026, 4, 9),
       }),
     )
+  })
+
+  test('onMove compensates a widened (behind-schedule) drag so write-back targets the real end', () => {
+    // Base span: Mon May 4 -> Sat May 9 (display). Projected last day Mon
+    // May 18 -> widened display end Tue May 19 (a 10-day overrun).
+    const onItemEdit = vi.fn()
+    const { getByLabelText } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...oneRowData, projected_col: ['2026-05-18'] }}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    // Turn the toggle on so the item is actually rendered widened — the
+    // compensation only applies while showProjection is true.
+    fireEvent.click(getByLabelText(/show projected completion/i))
+
+    const callback = vi.fn()
+    // Simulate the user dragging the (widened) right edge from Tue May 19
+    // out another 7 days to Tue May 26.
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 26) },
+      callback,
+    )
+
+    // The real end moves by the same 7-day drag distance (May 8 -> May 15),
+    // not to the dragged (projected) position — snapping lands the widened
+    // edge on Sat May 23, 10 days later than the original Tue May 19
+    // overrun, so subtracting that same 10-day overrun recovers the real
+    // Friday one week later than the stored May 8.
+    expect(onItemEdit).toHaveBeenCalledWith({
+      id_col: 'r1',
+      start_col: '2026-05-04 00:00:00',
+      end_col: '2026-05-15 00:00:00',
+    })
   })
 
   test('onMove clamps a right-edge drag past the start to the start\'s own Friday', () => {

@@ -41,12 +41,30 @@ export interface ItemVisual {
   description?: string
 }
 
+export interface WidenedProjection {
+  /** The projected display end to substitute for the item's real end. */
+  end: Date
+  /** The item's style string recomputed with `--progress` rescaled to the
+   * widened box — the fill is a % of the item's own (always-visible) width,
+   * so widening without rescaling would shrink its absolute position even
+   * though the underlying progress value didn't change. Undefined when the
+   * item has no progress value (nothing needs to change from the base
+   * style — `--projection-ratio` itself is inert until `show-projection` is
+   * present, so it doesn't need a toggle-aware variant). */
+  style?: string
+}
+
 export interface BuildResult {
+  /** Items with their real (unwidened) start/end. */
   items: DataItem[]
-  /** Non-interactive "behind schedule" ghost ranges, one per item with an
-   * overrun projection — kept separate so the caller can include/exclude them
-   * based on the projection-toggle state without touching `items`. */
-  projectionItems: DataItem[]
+  /** Item id → what to substitute while the projection toggle is on, for
+   * items with a behind-schedule projection — see `resolveProjection`'s doc
+   * comment in buildItems.ts for why widening the item itself (not a
+   * sibling) is what makes vis-timeline's stacking correctly treat the
+   * overrun as this item's own footprint. `end` is also used to compensate
+   * drag write-back math so editing a widened bar still targets the item's
+   * real stored end. */
+  widenedByItemId: Map<string, WidenedProjection>
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>

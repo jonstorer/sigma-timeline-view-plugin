@@ -19,7 +19,7 @@ import {
   formatSigmaDateTime,
   snapDisplaySpan,
 } from './weekSpan'
-import type { ItemVisual, TimelineConfig } from './types'
+import type { ItemVisual, TimelineConfig, WidenedProjection } from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
@@ -137,11 +137,20 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
-  // Whether the projected-completion overlay is shown. Purely a CSS toggle
-  // (see the `show-projection` class below and App.css) — the overlay's
-  // geometry is already baked into each item's style/className in
-  // buildItems.ts, so flipping this never touches vis-timeline's DataSet.
+  // Whether the projected-completion overlay is shown. For an ahead-of-
+  // schedule item this is a pure CSS toggle (the `show-projection` class
+  // below gates a rule already baked into the item's style/className). For a
+  // behind-schedule item it also substitutes the item's widened display end
+  // into the synced DataSet (see the items/groups sync effect) — read via
+  // showProjectionRef inside onMove, which needs the live value to decide
+  // whether to compensate drag write-back math.
   const [showProjection, setShowProjection] = useState(false)
+  const showProjectionRef = useRef(showProjection)
+  // Item id -> real (unwidened) display end, kept alongside
+  // widenedByItemIdRef so onMove can recover how much a behind-schedule
+  // item's end was widened by, to compensate a drag on it (see onMove).
+  const baseEndByItemIdRef = useRef<Map<string, Date>>(new Map())
+  const widenedByItemIdRef = useRef<Map<string, WidenedProjection>>(new Map())
   // Whether groupsDs is currently the Timeline's active groups source. Lets
   // the sync effect below skip re-calling setGroups() when nothing about
   // grouped-vs-ungrouped changed — see that effect for why it matters.
@@ -162,7 +171,7 @@ export function LiveTimeline({
 
   const {
     items,
-    projectionItems,
+    widenedByItemId,
     groups,
     visuals,
     rowIdByItemId,
@@ -178,6 +187,19 @@ export function LiveTimeline({
   useEffect(() => {
     rowIdByItemIdRef.current = rowIdByItemId
   }, [rowIdByItemId])
+
+  useEffect(() => {
+    showProjectionRef.current = showProjection
+  }, [showProjection])
+
+  useEffect(() => {
+    widenedByItemIdRef.current = widenedByItemId
+    baseEndByItemIdRef.current = new Map(
+      items
+        .filter((item) => item.end != null)
+        .map((item) => [String(item.id), item.end as Date]),
+    )
+  }, [items, widenedByItemId])
 
   useEffect(() => {
     configRef.current = config
@@ -237,22 +259,7 @@ export function LiveTimeline({
         // `item.vertical / 2` at the bottom, so a small vertical left items
         // flush against the lane bottom. Bump vertical for a real bottom gap
         // (also widens spacing between stacked items, the same knob).
-        item: {
-          vertical: 24,
-          // vis-timeline pads every item's *effective* width by this amount
-          // when deciding whether two items can share a stacking row (see
-          // performStacking in vis-timeline's source) — not just a visual
-          // gap. A behind-schedule projection ghost starts with zero gap from
-          // its own item's end by design (it's meant to look contiguous), so
-          // this must be exactly 0, not "small": performStacking's collision
-          // check has a 0.001px epsilon, so any positive value (even 1px)
-          // still registers a zero-gap touch as a collision and forces the
-          // ghost onto a separate row — confirmed the hard way. Zero is what
-          // makes the ghost read as a continuation instead of a disconnected
-          // block one row down. Trade-off: two genuinely distinct back-to-back
-          // tasks now render touching with no breathing room between them.
-          horizontal: 0,
-        },
+        item: { vertical: 24, horizontal: 10 },
         axis: 24,
       },
       verticalScroll: true,
@@ -283,14 +290,9 @@ export function LiveTimeline({
       snap: null,
       // Live-drag snapping: keeps the bar visually on Mon->Sat weeks while the
       // user drags, independent of which edge (or the whole item) is moving.
-      // Weekend background bands, non-editable items (e.g. a behind-schedule
-      // projection ghost), and end-less items pass through untouched.
+      // Weekend background bands and end-less items pass through untouched.
       onMoving: (item, callback) => {
-        if (
-          item.type === 'background' ||
-          item.editable === false ||
-          item.end == null
-        ) {
+        if (item.type === 'background' || item.end == null) {
           callback(item)
           return
         }
@@ -315,6 +317,21 @@ export function LiveTimeline({
         // with no preceding panmove. Snapping is a fixed point, so re-running
         // it on an already-snapped span is a no-op.
         const span = item.end != null ? snapDisplaySpan(item.start, item.end) : null
+        // A behind-schedule item's displayed end is widened past its real end
+        // while the projection toggle is on (see widenedByItemId), so a
+        // drag on its right edge moves the WIDENED end, not the real one.
+        // Compensate by the same amount the item was widened by, so the real
+        // end shifts by exactly what the user dragged — write-back always
+        // targets the true stored end, never the projected one.
+        let realEnd = span?.end ?? null
+        if (span && showProjectionRef.current) {
+          const widenedEnd = widenedByItemIdRef.current.get(itemId)?.end
+          const baseEnd = baseEndByItemIdRef.current.get(itemId)
+          if (widenedEnd && baseEnd) {
+            const overrunMs = widenedEnd.getTime() - baseEnd.getTime()
+            realEnd = new Date(span.end.getTime() - overrunMs)
+          }
+        }
         // Key the payload by the source column ids (the same keys the data
         // arrived under) so the edit action maps each field back to its
         // column. The end is converted from the DISPLAY Saturday back to the
@@ -323,7 +340,7 @@ export function LiveTimeline({
         const payload: ItemEditPayload = {
           [idCol]: rowId,
           [startCol]: span ? formatSigmaDateTime(span.start) : null,
-          [endCol]: span ? formatSigmaDateTime(displayEndToDataEnd(span.end)) : null,
+          [endCol]: realEnd ? formatSigmaDateTime(displayEndToDataEnd(realEnd)) : null,
         }
         // Lane reassignment: item.group is the lane the item was dropped onto.
         // Treat each group column independently and emit its full value set for
@@ -515,14 +532,27 @@ export function LiveTimeline({
         groupsAttachedRef.current = hasGroups
       }
 
-      // Behind-schedule ghosts are real stacking-aware items (see
-      // resolveProjection), so showing/hiding them is a genuine DataSet
-      // change, not pure CSS — included here only while the toggle is on.
-      const itemsToSync = showProjection ? [...items, ...projectionItems] : items
+      // A behind-schedule item's end (and, if it has a progress fill, its
+      // style) is widened to the projected date only while the toggle is on —
+      // see resolveProjection's doc comment. This is a genuine DataSet change
+      // (not pure CSS): it's what makes vis-timeline's own stacking treat the
+      // overrun as this item's real footprint, so it correctly bumps a
+      // colliding sibling out of the way.
+      const itemsToSync = showProjection
+        ? items.map((item) => {
+            const widened = widenedByItemId.get(String(item.id))
+            if (!widened) return item
+            return {
+              ...item,
+              end: widened.end,
+              ...(widened.style ? { style: widened.style } : {}),
+            }
+          })
+        : items
       syncDataSet(itemsDs, itemsToSync, new Set(weekendIdsRef.current))
       syncWeekends()
     })
-  }, [items, projectionItems, groups, syncWeekends, showProjection])
+  }, [items, widenedByItemId, groups, syncWeekends, showProjection])
 
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.startDate || !config?.endDate
