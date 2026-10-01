@@ -321,6 +321,9 @@
   top: 0;
   bottom: 0;
   display: none;
+  /* Purely decorative — never intercepts a click/hover meant for the real
+     item underneath or around it. */
+  pointer-events: none;
 }
 .timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::after {
   display: block;
@@ -338,6 +341,10 @@
    DataSet (LiveTimeline.tsx) — not by a CSS rule, so no `show-projection`
    gate needed here. */
 .timeline-host .vis-item.vis-range.ts-projection-behind {
+  /* Purely decorative — exists only to hold space in vis-timeline's stacking
+     layout. No hover, no click, no cursor change, no selection outline. */
+  pointer-events: none;
+  cursor: default;
   background-color: transparent;
   background-image: repeating-linear-gradient(
     45deg,
