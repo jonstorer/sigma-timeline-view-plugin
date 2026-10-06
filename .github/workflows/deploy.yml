@@ -64,7 +64,11 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - run: npm run deploy
+      # One plugin today (gantt), deployed explicitly. Add another step (or
+      # switch to a matrix over plugin names) when a second plugin exists —
+      # each writes to its own s3://<bucket>/<plugin-name>/ prefix, so steps
+      # are independent and this can run them all without extra care.
+      - run: npm run deploy --workspace=gantt
         env:
           S3_BUCKET: ${{ vars.S3_BUCKET }}
           AWS_REGION: ${{ vars.AWS_REGION }}
