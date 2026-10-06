@@ -1,18 +1,48 @@
-/**
- * Pull the markdown string out of the bound column's data.
- *
- * Only ever reads row 0. This plugin is meant to render one value at a time —
- * either a single-row element, or (the primary use case) one instance per
- * card inside a Sigma Repeated Container, where Sigma itself scopes the
- * element's data to the current row before the plugin ever sees it. If a
- * multi-row element is bound directly (no repeater), later rows are simply
- * not rendered — this plugin doesn't loop over rows.
- */
-export function extractMarkdown(
+export interface MarkdownRow {
+  body: string
+  topLeft: string
+  topRight: string
+  bottomLeft: string
+  bottomRight: string
+}
+
+interface ColumnSelection {
+  body?: string
+  topLeft?: string
+  topRight?: string
+  bottomLeft?: string
+  bottomRight?: string
+}
+
+function columnValues(
   data: Record<string, unknown[]> | undefined,
   column: string | undefined,
-): string {
-  if (!column || !data) return ''
-  const value = data[column]?.[0]
-  return value == null ? '' : String(value)
+): string[] {
+  if (!column || !data) return []
+  return (data[column] ?? []).map((value) => (value == null ? '' : String(value)))
+}
+
+/**
+ * Zip the body column with the four optional corner columns by row index.
+ * Row count follows the body column — a corner column is read up to that
+ * length and padded with '' past its own, since a corner with no value for
+ * a given row just means that row has nothing to show in that spot.
+ */
+export function extractRows(
+  data: Record<string, unknown[]> | undefined,
+  columns: ColumnSelection,
+): MarkdownRow[] {
+  const bodies = columnValues(data, columns.body)
+  const topLefts = columnValues(data, columns.topLeft)
+  const topRights = columnValues(data, columns.topRight)
+  const bottomLefts = columnValues(data, columns.bottomLeft)
+  const bottomRights = columnValues(data, columns.bottomRight)
+
+  return bodies.map((body, i) => ({
+    body,
+    topLeft: topLefts[i] ?? '',
+    topRight: topRights[i] ?? '',
+    bottomLeft: bottomLefts[i] ?? '',
+    bottomRight: bottomRights[i] ?? '',
+  }))
 }

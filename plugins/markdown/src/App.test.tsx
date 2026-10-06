@@ -21,32 +21,72 @@ describe('App', () => {
     )
   })
 
-  test('prompts for a data source when none configured', () => {
+  test('prompts for a data source, and shows the example layout, when none configured', () => {
     vi.mocked(useConfig).mockReturnValue({})
-    const { getByText } = render(<App />)
+    const { getByText, container } = render(<App />)
     expect(getByText(/Pick a data source/i)).toBeInTheDocument()
+    expect(container.querySelector('.md-row-example')).toBeInTheDocument()
   })
 
-  test('prompts for a markdown column when source is set but column is not', () => {
+  test('prompts for a Body column, and still shows the example layout, when source is set but column is not', () => {
     vi.mocked(useConfig).mockReturnValue({ source: 'element-1' })
-    const { getByText } = render(<App />)
-    expect(getByText(/Pick a Markdown column/i)).toBeInTheDocument()
+    const { getByText, container } = render(<App />)
+    expect(getByText(/Pick a Body column/i)).toBeInTheDocument()
+    expect(container.querySelector('.md-row-example')).toBeInTheDocument()
   })
 
-  test('renders the markdown column\'s value as HTML', () => {
+  test('renders the body markdown plus all four corners for each row', () => {
     vi.mocked(useConfig).mockReturnValue({
       source: 'element-1',
-      markdownColumn: 'md_col',
+      bodyColumn: 'body',
+      topLeftColumn: 'tl',
+      topRightColumn: 'tr',
+      bottomLeftColumn: 'bl',
+      bottomRightColumn: 'br',
     })
-    vi.mocked(useElementData).mockReturnValue({ md_col: ['**bold**'] })
-    const { container } = render(<App />)
+    vi.mocked(useElementData).mockReturnValue({
+      body: ['**bold**'],
+      tl: ['Author: Jon'],
+      tr: ['v1.2'],
+      bl: ['Draft'],
+      br: ['2026-10-06'],
+    })
+    const { container, getByText } = render(<App />)
     expect(container.querySelector('strong')?.textContent).toBe('bold')
+    expect(getByText('Author: Jon')).toBeInTheDocument()
+    expect(getByText('v1.2')).toBeInTheDocument()
+    expect(getByText('Draft')).toBeInTheDocument()
+    expect(getByText('2026-10-06')).toBeInTheDocument()
+  })
+
+  test('corners are optional — omitting them renders only the body, no example layout', () => {
+    vi.mocked(useConfig).mockReturnValue({
+      source: 'element-1',
+      bodyColumn: 'body',
+    })
+    vi.mocked(useElementData).mockReturnValue({ body: ['plain text'] })
+    const { container, getByText } = render(<App />)
+    expect(container.querySelectorAll('.md-corner')).toHaveLength(0)
+    expect(container.querySelector('.md-row-example')).not.toBeInTheDocument()
+    expect(getByText('plain text')).toBeInTheDocument()
+  })
+
+  test('skips rows with an empty or missing body', () => {
+    vi.mocked(useConfig).mockReturnValue({
+      source: 'element-1',
+      bodyColumn: 'body',
+    })
+    vi.mocked(useElementData).mockReturnValue({
+      body: ['first', null, 'third'],
+    })
+    const { container } = render(<App />)
+    expect(container.querySelectorAll('.md-row')).toHaveLength(2)
   })
 
   test('reads the element id from the resolved config value, not the literal "source" key', () => {
     vi.mocked(useConfig).mockReturnValue({
       source: 'element-xyz',
-      markdownColumn: 'md_col',
+      bodyColumn: 'body',
     })
     render(<App />)
     expect(vi.mocked(useElementData)).toHaveBeenCalledWith('element-xyz')
