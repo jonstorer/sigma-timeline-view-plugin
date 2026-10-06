@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "typecheck": "lerna run typecheck",
+    "test": "lerna run test",
+    "version": "lerna version"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -25,6 +26,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "lerna": "^10.0.1",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
