@@ -40,19 +40,47 @@ point it at the dev server's URL (see that plugin's own README for the port).
   plugin's `src/` in a single pass.
 - `scripts/deploy.sh` — shared deploy script, parameterized by plugin name
   (`deploy.sh <plugin-name>`); see [Deploying](#deploying).
+- `lerna.json` — see [Versioning](#versioning).
 
 ## Root scripts
 
 | Script | What it does |
 |---|---|
 | `npm run lint` | ESLint across every plugin in one pass. |
-| `npm run typecheck` | Runs each plugin's own `typecheck` script (`tsc -b --noEmit`). |
-| `npm test` | Runs each plugin's own `test` script (`vitest run`). |
+| `npm run typecheck` | `lerna run typecheck` — runs each plugin's own `typecheck` script (`tsc -b --noEmit`), cached per-package. |
+| `npm test` | `lerna run test` — runs each plugin's own `test` script (`vitest run`), cached per-package. |
+| `npm run release` | `lerna version` — bump and tag whichever plugins changed; see [Versioning](#versioning). |
 
 `dev` / `build` / `preview` / `deploy` are per-plugin (you work on one plugin
 at a time) — run them with `--workspace=<name>`, e.g.
 `npm run build --workspace=gantt`, or `cd plugins/<name>` and run them
 unprefixed.
+
+## Versioning
+
+Plugins version **independently** — `gantt` at `0.3.1`, some other plugin at
+`0.1.0`, no shared repo-wide version number. That's what
+`"version": "independent"` in `lerna.json` means, and it matches how the
+plugins themselves are independent products sharing infra, not one coherent
+release.
+
+```bash
+npm run release          # interactive: pick a bump per changed plugin
+```
+
+This bumps the version(s) in the affected `plugins/*/package.json`, commits
+the change, and tags it `<plugin-name>@<version>` (e.g. `gantt@0.3.1`) — one
+tag per plugin, so you can tell at a glance which version of which plugin is
+live. It does **not** push — `command.version.push` is `false` in
+`lerna.json` on purpose, so publishing a release (`git push --follow-tags`)
+stays a separate, deliberate step rather than something a single command does
+silently. It also doesn't publish anywhere (no npm registry involved) — these
+plugins ship to S3 via `deploy.sh`, not `npm publish`.
+
+**Note:** don't name any root or plugin script `version` — it collides with
+npm/Lerna's reserved version-lifecycle hook, and `lerna version` will find and
+re-run it on itself mid-bump (confirmed the hard way while setting this up).
+That's why the root script above is `release`, not `version`.
 
 ## Deploying
 
