@@ -11,6 +11,7 @@ bucket (`s3://<bucket>/<plugin-name>/`) — see [Deploying](#deploying).
 | Plugin | Path | What it does |
 |---|---|---|
 | gantt | [`plugins/gantt`](plugins/gantt) | Renders worksheet rows as a Gantt-style timeline. |
+| markdown | [`plugins/markdown`](plugins/markdown) | Renders a text column's value as Markdown — built for use inside a Repeated Container (one card per row). |
 
 Each plugin's own README has its full config/editor-panel docs.
 
