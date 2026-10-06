@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "lerna run typecheck",
     "test": "lerna run test",
-    "version": "lerna version"
+    "release": "lerna version"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
