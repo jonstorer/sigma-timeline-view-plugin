@@ -6,7 +6,9 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', '.claude']),
+  // '**/dist' (not bare 'dist') so it matches each plugin's build output,
+  // e.g. plugins/gantt/dist, not just a top-level dist/.
+  globalIgnores(['**/dist', '.claude']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
