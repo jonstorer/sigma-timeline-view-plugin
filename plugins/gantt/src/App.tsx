@@ -5,7 +5,7 @@ import {
   useElementColumns,
   useElementData,
 } from '@sigmacomputing/plugin'
-import { editorPanelConfig, SOURCE } from './editorPanel'
+import { editorPanelConfig, SOURCE, SOURCE_B } from './editorPanel'
 import { LiveTimeline, type ItemEditPayload } from './LiveTimeline'
 import { withColumnLabels } from './editPayload'
 import { useTriggerWithValue } from './useTriggerWithValue'
@@ -24,6 +24,9 @@ function App() {
   // Column metadata for the source element — used to label the edit payload's
   // keys with the human column names instead of opaque column ids.
   const columns = useElementColumns(config?.[SOURCE] ?? '')
+  // Second source — read-only, entirely independent of the
+  // primary source's data/edit wiring. See secondarySource.ts.
+  const dataB = useElementData(config?.[SOURCE_B] ?? '')
 
   // Drag-edit: relabel the payload keys (source column id → human name) and
   // write it, then fire the edit action. Keys are the id, start, end, and each
@@ -68,6 +71,7 @@ function App() {
     <LiveTimeline
       config={config}
       data={data}
+      dataB={dataB}
       onItemEdit={editEnabled ? onItemEdit : undefined}
       onItemSelect={selectEnabled ? onItemSelect : undefined}
     />
