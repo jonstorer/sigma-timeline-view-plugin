@@ -25,6 +25,17 @@ export interface TimelineConfig {
   editAction?: string
   recordIdVariable?: string
   selectAction?: string
+  sourceB?: string
+  labelB?: string
+  groupB?: string | string[]
+  startDateB?: string
+  endDateB?: string
+  highlightColorColumnB?: string
+  progressColumnB?: string
+  pillLabelColumnB?: string
+  pillColorColumnB?: string
+  linkColumnB?: string
+  descriptionColumnB?: string
 }
 
 export type GroupValue = string

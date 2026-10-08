@@ -10,6 +10,7 @@ import {
 } from 'vis-timeline/esnext'
 import moment from 'moment'
 import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
+import { mergeSecondarySource } from './secondarySource'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import { formatDragTooltip } from './dragHelpers'
@@ -118,6 +119,7 @@ export type ItemEditPayload = Record<string, unknown>
 export interface LiveTimelineProps {
   config: TimelineConfig | null | undefined
   data: Record<string, unknown[]> | undefined
+  dataB?: Record<string, unknown[]> | undefined
   onItemEdit?: (payload: ItemEditPayload) => void
   onItemSelect?: (recordId: string) => void
 }
@@ -125,6 +127,7 @@ export interface LiveTimelineProps {
 export function LiveTimeline({
   config,
   data,
+  dataB,
   onItemEdit,
   onItemSelect,
 }: LiveTimelineProps) {
@@ -169,16 +172,26 @@ export function LiveTimeline({
     groupValuesByRowId: new Map(),
   })
 
+  const primary = useMemo(() => buildItemsAndGroups(config, data), [config, data])
   const {
-    items,
     widenedByItemId,
-    groups,
-    visuals,
     rowIdByItemId,
     groupColumns,
     originalPathByItemId,
     groupValuesByRowId,
-  } = useMemo(() => buildItemsAndGroups(config, data), [config, data])
+  } = primary
+
+  // Second source (read-only) merged onto the primary source's
+  // items/groups/visuals — see secondarySource.ts. `visuals` must come from
+  // the merge, not `primary` alone: source B's pill/link/description are
+  // computed during that merge and only reachable under its prefixed item
+  // ids. Everything else above still reflects the primary source only —
+  // source B has no id/edit/select wiring, so write-back context never needs
+  // to know about it.
+  const { items, groups, visuals } = useMemo(
+    () => mergeSecondarySource(primary, config, dataB),
+    [primary, config, dataB],
+  )
 
   useEffect(() => {
     visualsRef.current = visuals

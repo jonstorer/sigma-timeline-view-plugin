@@ -222,6 +222,25 @@ Undefined when `[Progress]` is 0 (no pace yet) — guard for that in your
 formula (e.g. return `[End]` or null) so the column doesn't produce a
 divide-by-zero result for not-yet-started items.
 
+### Second source (optional)
+
+For overlaying a second, independently-configured table on the same chart —
+e.g. an on-call schedule alongside project tasks — without building a SQL
+blend/union of the two tables first.
+
+A full duplicate of the display slots above (`labelB`, `groupB`, `startDateB`,
+`endDateB`, `highlightColorColumnB`, `progressColumnB`, `pillLabelColumnB`,
+`pillColorColumnB`, `linkColumnB`, `descriptionColumnB`), all sourced from a
+second **Second source** element. Rendered on the same chart as the primary
+source: a group whose value matches a primary-source group (e.g. the same
+person's name) lands on the **same row**, so vis-timeline's own stacking
+makes any time overlap between the two sources visible without either one
+knowing about the other.
+
+Source B is strictly read-only — no id/edit/select wiring exists for it, so
+its items always render with `editable: false` (dashed outline,
+`.ts-source-b`) regardless of the main Edit/Select config.
+
 ### Multi-level grouping
 
 The **Group by** slot accepts an ordered list of columns. The first column is
