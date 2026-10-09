@@ -1,5 +1,6 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
 import { buildItemsAndGroups } from './buildItems'
+import { colorForKey } from './colorHash'
 import type { BuildResult, ItemVisual, TimelineConfig } from './types'
 
 /**
@@ -33,6 +34,45 @@ export interface MergedItemsAndGroups {
   visuals: Map<string, ItemVisual>
 }
 
+const WORK_SUBGROUP = 'work'
+const ONCALL_SUBGROUP = 'oncall'
+
+/**
+ * Pins the on-call subgroup to the top band of every row, regardless of how
+ * many work items stack beneath it — see vis-timeline's DataGroup.subgroupOrder.
+ *
+ * vis-timeline calls this with each subgroup's first raw item **data object**,
+ * not the subgroup name itself (confirmed by reading its source — the type
+ * declares `(a: any, b: any) => number` without documenting the shape). An
+ * earlier version of this compared `a`/`b` directly to the subgroup name
+ * string, which is never true for an object, so the comparator silently
+ * always returned 0 and subgroups fell back to insertion order.
+ */
+function subgroupOrder(a: DataItem, b: DataItem): number {
+  if (a.subgroup === ONCALL_SUBGROUP) return -1
+  if (b.subgroup === ONCALL_SUBGROUP) return 1
+  return 0
+}
+
+/**
+ * Source B's default color, when `highlightColorColumnB` wasn't configured
+ * (or was blank for this row): a consistent color per person, so distinct
+ * on-call shifts are visually distinguishable without anyone having to wire
+ * up a color column. An explicit `--item-color` already in `item.style`
+ * (from a configured highlight column) always wins — this only fills the gap.
+ *
+ * Hashed on the item's own label (content), not its group: the group a
+ * source-B row lands on can be shared by many different people (e.g.
+ * grouped by team, not by individual), which would otherwise hash everyone
+ * on that row to the same color.
+ */
+function withDefaultColor(item: DataItem): DataItem {
+  if (item.style?.includes('--item-color:')) return item
+  const { background, text } = colorForKey(item.content)
+  const colorVars = `--item-color: ${background}; --item-text-color: ${text};`
+  return { ...item, style: item.style ? `${item.style} ${colorVars}` : colorVars }
+}
+
 /**
  * Second-source support: build source B's items/groups through the exact
  * same pipeline as the primary source, then merge the two result sets onto
@@ -61,17 +101,33 @@ export function mergeSecondarySource(
     return { items: primary.items, groups: primary.groups, visuals: primary.visuals }
   }
 
+  // Source B is on-call-schedule-shaped data: shifts change down to the
+  // minute, not the day, so its items must sit at their exact instant rather
+  // than being floored to midnight like the primary source's week/day-
+  // granular items.
   const {
     items: itemsB,
     groups: groupsB,
     visuals: visualsB,
-  } = buildItemsAndGroups(configB, dataB)
+  } = buildItemsAndGroups(configB, dataB, { exactTime: true })
 
-  const prefixedItemsB = itemsB.map((item) => ({
+  const prefixedItemsB = itemsB.map((item) =>
+    withDefaultColor({
+      ...item,
+      id: `b|${item.id}`,
+      editable: false,
+      className: [item.className, 'ts-source-b'].filter(Boolean).join(' '),
+      subgroup: ONCALL_SUBGROUP,
+    }),
+  )
+
+  // Reserve a dedicated top band for source B, separate from however many
+  // work items are stacked in a row — without this, vis-timeline would just
+  // pack on-call bars in wherever they fit among the work items, instead of
+  // always showing as one consistent strip at the top of every swimlane.
+  const primaryItems = primary.items.map((item) => ({
     ...item,
-    id: `b|${item.id}`,
-    editable: false,
-    className: [item.className, 'ts-source-b'].filter(Boolean).join(' '),
+    subgroup: WORK_SUBGROUP,
   }))
 
   // visualsB is keyed by source B's own (unprefixed) item ids — remap to the
@@ -104,9 +160,29 @@ export function mergeSecondarySource(
     })
   }
 
+  const groups = Array.from(groupsById.values()).map((g) => ({
+    ...g,
+    subgroupOrder,
+    // subgroupOrder alone only controls ordering when something already
+    // needs separate lines — it doesn't force separation on its own. Without
+    // subgroupStack, an on-call bar that happens not to overlap any work
+    // item in time gets packed onto that item's own line by the generic
+    // stacking algorithm, so the "always a dedicated top band" effect only
+    // showed up on rows busy enough to need it anyway. This forces the
+    // oncall subgroup onto its own line(s) unconditionally.
+    //
+    // Both subgroups must be listed, not just oncall: per vis-timeline's own
+    // source (confirmed by reading it), once subgroupStack is an object at
+    // all it becomes a per-subgroup whitelist — any subgroup left out
+    // defaults to no stacking (direct overlay) rather than falling back to
+    // the top-level `stack: true` option. Omitting `work` here silently
+    // turned off work items' own stacking among themselves.
+    subgroupStack: { [ONCALL_SUBGROUP]: true, [WORK_SUBGROUP]: true },
+  }))
+
   return {
-    items: [...primary.items, ...prefixedItemsB],
-    groups: Array.from(groupsById.values()),
+    items: [...primaryItems, ...prefixedItemsB],
+    groups,
     visuals,
   }
 }

@@ -78,21 +78,22 @@ describe('renderItemContent', () => {
     }
   })
 
-  test('renders a link first (left of the pill) when linkUrl is set, opening in a new tab', () => {
+  test('wraps the whole item in a link when linkUrl is set, opening in a new tab', () => {
     const visuals = new Map<string, ItemVisual>([
       ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
     ])
     const out = renderItemContent(makeItem('x', 'Task'), visuals)
     expect(out).toBeInstanceOf(HTMLElement)
-    if (out instanceof HTMLElement) {
-      const link = out.querySelector<HTMLAnchorElement>('a.ts-item-link')
-      expect(link).not.toBeNull()
-      expect(link!.getAttribute('href')).toBe('https://example.com/r/1')
-      expect(link!.target).toBe('_blank')
-      expect(link!.rel).toContain('noopener')
-      // Left-anchored: first child, before the pill.
-      expect(out.firstElementChild).toBe(link)
-    }
+    expect((out as HTMLElement).tagName).toBe('A')
+    const link = out as HTMLAnchorElement
+    expect(link.className).toBe('ts-item-link')
+    expect(link.getAttribute('href')).toBe('https://example.com/r/1')
+    expect(link.target).toBe('_blank')
+    expect(link.rel).toContain('noopener')
+    // The pill/text content lives inside the link, structure unchanged.
+    expect(link.querySelector('.ts-item-wrapper')).not.toBeNull()
+    expect(link.querySelector('.ts-pill')?.textContent).toBe('P0')
+    expect(link.querySelector('.ts-item-text')?.textContent).toBe('Task')
   })
 
   test('no link is rendered when linkUrl is absent', () => {

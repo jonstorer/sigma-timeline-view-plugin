@@ -299,10 +299,22 @@
     0 0 0 2px #93c5fd,
     0 2px 6px rgba(15, 23, 42, 0.14);
 }
-/* Second source (secondarySource.ts) — a dashed outline marks an item as
-   coming from source B, not the primary source. Read-only, never draggable. */
+/* Second source (secondarySource.ts) — same pill shape as a work item
+   (rounded, soft shadow — see the base .vis-item.vis-range rule above), but
+   filled entirely with its color rather than white-with-a-left-accent: this
+   is a schedule marker (e.g. on-call coverage), not a roadmap item, so the
+   whole pill reads as one solid color block instead of competing with the
+   highlight-bar convention work items use. Pinned to its own subgroup (see
+   ONCALL_SUBGROUP) so it always renders as one consistent strip at the top
+   of every swimlane. Read-only, never draggable.
+   --item-color/--item-text-color are set per item in secondarySource.ts — a
+   consistent pastel pair hashed from the row's label (see colorHash.ts)
+   unless highlightColorColumnB was configured, which always wins. The
+   literal red fallback only applies if somehow neither is present. */
 .timeline-host .vis-item.vis-range.ts-source-b {
-  border: 1px dashed #60a5fa;
+  background: var(--item-color, #ef4444);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14);
+  color: var(--item-text-color, #ffffff);
   cursor: default;
 }
 .timeline-host .vis-item.vis-range .vis-item-content {
@@ -394,24 +406,16 @@
   font-weight: 500;
 }
 
-/* Optional external-doc link, rendered first (left of the pill) as a compact,
-   subtle glyph — quick context that stays visible as a wide item scrolls,
-   without taking much space. */
+/* Optional external-doc link: when configured, the whole item becomes
+   clickable rather than a separate glyph. `display: contents` means the
+   anchor itself doesn't participate in layout at all — the wrapped
+   .ts-item-wrapper's own flex layout is unaffected, this just adds
+   click-to-navigate semantics around it. */
 .ts-item-link {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  color: #2563eb;
-  font-size: 11px;
-  line-height: 1;
+  display: contents;
+  color: inherit;
   text-decoration: none;
-}
-.ts-item-link:hover {
-  background: rgba(37, 99, 235, 0.12);
+  cursor: pointer;
 }
 
 /* ---- Item hover card ---------------------------------------------- */

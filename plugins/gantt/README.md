@@ -237,6 +237,45 @@ person's name) lands on the **same row**, so vis-timeline's own stacking
 makes any time overlap between the two sources visible without either one
 knowing about the other.
 
+Source B's `startDateB`/`endDateB` render at their **exact instant**, not
+floored to the day the way the primary source's dates are — the primary
+Gantt is week/day-granular by design, but source B is built for data with
+genuine sub-day boundaries (e.g. an on-call shift changing at 4pm). This
+isn't configurable; source B always uses exact time.
+
+Source B renders as the same pill shape as a work item, just filled entirely
+with its color instead of white-with-a-left-accent, in its own dedicated
+band pinned to the **top of every swimlane**. That band reserves its own
+vertical space regardless of how many work items stack beneath it in that
+row — both are driven by vis-timeline's `subgroup` mechanism:
+`subgroupOrder` controls which band renders on top, and `subgroupStack`
+forces each subgroup to stack independently rather than only separating
+when items happen to collide. Both `work` and `oncall` must be listed in
+`subgroupStack` — vis-timeline treats it as a per-subgroup whitelist once
+it's an object at all, so leaving one out silently disables *that*
+subgroup's own stacking (a real regression caught during development: work
+items briefly started rendering directly on top of each other).
+
+Without `highlightColorColumnB` configured, each item gets a consistent
+color hashed from its own label (`colorHash.ts`) — the same pattern
+Slack/Linear/GitHub use for avatar colors, so distinct on-call people are
+visually distinguishable with zero color setup required. This is hashed
+from the label, not the group: a group can be shared by many people (e.g.
+grouped by team), which would otherwise give everyone on that row the same
+color. The hash maps algorithmically onto a hue (0–359) rather than
+indexing into a small fixed palette, so it scales to a large roster without
+constant collisions — background and text share the hash-chosen hue but
+differ in fixed saturation/lightness, so contrast is guaranteed regardless
+of which hue a name lands on. An explicit `highlightColorColumnB` value
+always overrides the hashed default.
+
+`margin.item.horizontal` is `0` globally (not a per-source setting — vis-
+timeline has no per-item-type margin) specifically so two contiguous
+source-B items (e.g. back-to-back on-call shifts with zero gap between them)
+pack onto one line instead of each getting bumped onto its own row — margin
+is pixels, and any positive value forces a stack at a 0px gap
+regardless of zoom level.
+
 Source B is strictly read-only — no id/edit/select wiring exists for it, so
 its items always render with `editable: false` (dashed outline,
 `.ts-source-b`) regardless of the main Edit/Select config.

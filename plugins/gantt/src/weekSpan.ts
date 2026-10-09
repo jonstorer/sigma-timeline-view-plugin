@@ -70,18 +70,12 @@ export function nearestWeekStart(date: Date): Date {
 }
 
 /**
- * Parse an inbound Sigma datetime cell (epoch ms, an ISO/naive datetime
- * string, or a Date) to the LOCAL midnight of the value's UTC calendar day.
- *
- * Rebuilding on the UTC day (not the local day) is deliberate: values written
- * back by `formatSigmaDateTime` are naive "Y-M-D H:M:S" strings with no
- * timezone marker, so Sigma stores (and returns) an instant at that wall-clock
- * time with no offset applied — i.e. effectively UTC. Reinterpreting on the
- * *local* calendar day would, in any negative-UTC-offset browser, read one day
- * early and walk the item back a week on every save. Returns null when `raw`
- * is absent or unparseable — never treat a missing value as "now".
+ * Shared parse step behind `parseCellDate` and `parseInstant`: accept an
+ * inbound Sigma cell (epoch ms, an ISO/naive datetime string, or a Date) and
+ * return the UTC moment it represents, or null if absent/unparseable. Never
+ * treat a missing value as "now".
  */
-export function parseCellDate(raw: unknown): Date | null {
+function parseCellMoment(raw: unknown): moment.Moment | null {
   if (raw == null || raw === '') return null
   let m: moment.Moment
   if (typeof raw === 'number') {
@@ -101,8 +95,36 @@ export function parseCellDate(raw: unknown): Date | null {
       m = Number.isNaN(native.getTime()) ? moment.invalid() : moment.utc(native)
     }
   }
-  if (!m.isValid()) return null
-  return new Date(m.year(), m.month(), m.date())
+  return m.isValid() ? m : null
+}
+
+/**
+ * Parse an inbound Sigma datetime cell to the LOCAL midnight of the value's
+ * UTC calendar day — for the primary Gantt, which is week/day-granular, so
+ * every item binds to a day column rather than a sub-day instant.
+ *
+ * Rebuilding on the UTC day (not the local day) is deliberate: values written
+ * back by `formatSigmaDateTime` are naive "Y-M-D H:M:S" strings with no
+ * timezone marker, so Sigma stores (and returns) an instant at that wall-clock
+ * time with no offset applied — i.e. effectively UTC. Reinterpreting on the
+ * *local* calendar day would, in any negative-UTC-offset browser, read one day
+ * early and walk the item back a week on every save.
+ */
+export function parseCellDate(raw: unknown): Date | null {
+  const m = parseCellMoment(raw)
+  return m ? new Date(m.year(), m.month(), m.date()) : null
+}
+
+/**
+ * Parse an inbound Sigma datetime cell to its exact instant — unlike
+ * `parseCellDate`, this keeps the time-of-day rather than flooring to
+ * midnight. For data with genuine sub-day boundaries (e.g. an on-call shift
+ * change at 4pm), flooring to midnight would misrepresent which hours are
+ * actually covered.
+ */
+export function parseInstant(raw: unknown): Date | null {
+  const m = parseCellMoment(raw)
+  return m ? m.toDate() : null
 }
 
 /**
@@ -140,6 +162,25 @@ export function dayBoundDisplaySpan(
   const end = parseCellDate(rawEnd)
   if (!start || !end) return null
   return { start, end: addDays(end.getTime() < start.getTime() ? start : end, 1) }
+}
+
+/**
+ * Span for a row with genuine sub-day boundaries (e.g. an on-call shift) —
+ * start/end are each the exact instant, no day-flooring and no "+1 day"
+ * exclusive-end adjustment (that adjustment is specifically a day-bound-
+ * display convention; an exact end instant already *is* the row's true end,
+ * nothing to push out to the next day's gridline). Clamped to start on an
+ * inverted end, same as `dayBoundDisplaySpan`, so a bad row still renders as
+ * something rather than a zero/negative-width item.
+ */
+export function exactDisplaySpan(
+  rawStart: unknown,
+  rawEnd: unknown,
+): DisplaySpan | null {
+  const start = parseInstant(rawStart)
+  const end = parseInstant(rawEnd)
+  if (!start || !end) return null
+  return { start, end: end.getTime() < start.getTime() ? start : end }
 }
 
 /**
