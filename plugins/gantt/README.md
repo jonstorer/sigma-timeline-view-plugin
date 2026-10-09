@@ -277,8 +277,12 @@ is pixels, and any positive value forces a stack at a 0px gap
 regardless of zoom level.
 
 Source B is strictly read-only — no id/edit/select wiring exists for it, so
-its items always render with `editable: false` (dashed outline,
-`.ts-source-b`) regardless of the main Edit/Select config.
+its items always render with `editable: false` regardless of the main
+Edit/Select config. One consequence: `linkColumnB` makes the **whole item**
+clickable rather than the small glyph `linkColumn` uses on the primary
+source — wrapping a draggable item's whole pill in a link swallows the click
+a drag gesture starts with, but source B is never draggable, so there's no
+such conflict to avoid.
 
 ### Show/hide each source
 
