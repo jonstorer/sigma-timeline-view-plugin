@@ -280,6 +280,23 @@ Source B is strictly read-only — no id/edit/select wiring exists for it, so
 its items always render with `editable: false` (dashed outline,
 `.ts-source-b`) regardless of the main Edit/Select config.
 
+### Show/hide each source
+
+Two header checkboxes — **Show primary source** and **Show second
+source** — let you toggle each source's items on and off independently.
+Primary starts checked; second source starts **unchecked**, so it doesn't
+crowd the primary source's own items the moment it's configured — check it
+on when you actually want to see it overlaid. "Show second source" only
+appears once `sourceB` is configured, same as the projected-completion
+checkbox only appearing once that slot is configured.
+
+Hiding a source only removes *its own* items — a row that still has the
+other source's items in it keeps its place. A row left with nothing in it
+at all (every source contributing to it is now hidden, or it only ever had
+items from the now-hidden source) disappears entirely rather than lingering
+as an empty swimlane. In a multi-level hierarchy this is recursive: a parent
+group disappears too once every one of its descendants is empty.
+
 ### Multi-level grouping
 
 The **Group by** slot accepts an ordered list of columns. The first column is

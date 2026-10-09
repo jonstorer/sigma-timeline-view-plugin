@@ -37,6 +37,16 @@ export interface MergedItemsAndGroups {
 const WORK_SUBGROUP = 'work'
 const ONCALL_SUBGROUP = 'oncall'
 
+/** Every source-B item's id is prefixed with this, both to keep it from
+ * colliding with a primary-source item id and so callers (e.g. the
+ * show/hide-source toggles in LiveTimeline) can tell which source an item
+ * in the merged array came from without re-deriving it. */
+export const SOURCE_B_ID_PREFIX = 'b|'
+
+export function isSourceBItemId(id: unknown): boolean {
+  return typeof id === 'string' && id.startsWith(SOURCE_B_ID_PREFIX)
+}
+
 /**
  * Pins the on-call subgroup to the top band of every row, regardless of how
  * many work items stack beneath it — see vis-timeline's DataGroup.subgroupOrder.
@@ -114,7 +124,7 @@ export function mergeSecondarySource(
   const prefixedItemsB = itemsB.map((item) =>
     withDefaultColor({
       ...item,
-      id: `b|${item.id}`,
+      id: `${SOURCE_B_ID_PREFIX}${item.id}`,
       editable: false,
       className: [item.className, 'ts-source-b'].filter(Boolean).join(' '),
       subgroup: ONCALL_SUBGROUP,

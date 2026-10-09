@@ -271,6 +271,102 @@ describe('LiveTimeline projection toggle', () => {
   })
 })
 
+describe('LiveTimeline source visibility toggles', () => {
+  const twoSourceConfig = {
+    ...oneRowConfig,
+    group: 'group_col',
+    sourceB: 'element-b',
+    startDateB: 'start_b',
+    endDateB: 'end_b',
+    groupB: 'group_b',
+  }
+  // "Alice" has items from both sources; "Bob" has a primary item only —
+  // this is what makes the empty-row-pruning tests below meaningful: a row
+  // should only disappear once *every* source contributing to it is hidden.
+  const twoSourceData = {
+    start_col: ['2026-05-01', '2026-05-15'],
+    end_col: ['2026-05-08', '2026-05-22'],
+    label_col: ['T1', 'T2'],
+    id_col: ['r1', 'r2'],
+    group_col: ['Alice', 'Bob'],
+  }
+  const dataB = {
+    start_b: ['2026-05-02T12:00:00Z'],
+    end_b: ['2026-05-03T12:00:00Z'],
+    group_b: ['Alice'],
+  }
+
+  test('shows primary source toggle but not second source toggle when sourceB is unconfigured', () => {
+    const { getByLabelText, queryByLabelText } = render(
+      <LiveTimeline config={oneRowConfig} data={oneRowData} />,
+    )
+    expect(getByLabelText(/show primary source/i)).toBeChecked()
+    expect(queryByLabelText(/show second source/i)).not.toBeInTheDocument()
+  })
+
+  test('shows both toggles when sourceB is configured; primary checked, second source starts unchecked', () => {
+    const { getByLabelText } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    expect(getByLabelText(/show primary source/i)).toBeChecked()
+    // Starts hidden so it doesn't crowd the primary source on first load.
+    expect(getByLabelText(/show second source/i)).not.toBeChecked()
+  })
+
+  test('unchecking "show primary source" hides source-A items, and prunes a row left fully empty', () => {
+    const { getByLabelText, getByText } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    // Source B starts hidden: only the 2 primary items show, across 2 lanes.
+    expect(getByText(/2 items across 2 lanes/i)).toBeInTheDocument()
+
+    fireEvent.click(getByLabelText(/show primary source/i))
+    // Both rows now have nothing visible at all (source B is still hidden).
+    expect(getByText(/^0 items\.$/i)).toBeInTheDocument()
+  })
+
+  test('checking "show second source" reveals source-B items alongside the primary source', () => {
+    const { getByLabelText, getByText } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    expect(getByText(/2 items across 2 lanes/i)).toBeInTheDocument()
+
+    fireEvent.click(getByLabelText(/show second source/i))
+    // Alice: primary + source-B items. Bob: primary item only. Still 2 lanes.
+    expect(getByText(/^3 items across 2 lanes\.$/i)).toBeInTheDocument()
+  })
+
+  test('hiding both sources leaves no items and no rows at all', () => {
+    const { getByLabelText, getByText } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    // Second source already starts hidden — just hide the primary too.
+    fireEvent.click(getByLabelText(/show primary source/i))
+    expect(getByText(/^0 items\.$/i)).toBeInTheDocument()
+  })
+
+  test('hiding every source never detaches the Timeline from grouped mode, and re-checking a box recovers it', () => {
+    // Regression test: setGroups(undefined) was previously called whenever
+    // the *filtered* view had zero groups, including from toggling sources
+    // off — and re-attaching later left the Timeline stuck with nothing
+    // drawable. Grouping attach/detach must stay keyed on whether grouping
+    // is configured at all, not on the current toggle state.
+    const { getByLabelText } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    const setGroups = lastTimelineInstance().setGroups
+    setGroups.mockClear()
+
+    // Second source already starts hidden — hide the primary too, so both
+    // are off at once.
+    fireEvent.click(getByLabelText(/show primary source/i))
+    expect(setGroups).not.toHaveBeenCalledWith(undefined)
+
+    fireEvent.click(getByLabelText(/show primary source/i))
+    expect(setGroups).not.toHaveBeenCalledWith(undefined)
+  })
+})
+
 describe('LiveTimeline drag editing', () => {
   test('constructs read-only when no edit handler is provided', () => {
     render(

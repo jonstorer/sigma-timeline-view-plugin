@@ -10,7 +10,8 @@ import {
 } from 'vis-timeline/esnext'
 import moment from 'moment'
 import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
-import { mergeSecondarySource } from './secondarySource'
+import { isSourceBItemId, mergeSecondarySource } from './secondarySource'
+import { pruneEmptyGroups } from './visibility'
 import { renderItemContent } from './templates'
 import { SOURCE } from './editorPanel'
 import { formatDragTooltip } from './dragHelpers'
@@ -149,6 +150,13 @@ export function LiveTimeline({
   // whether to compensate drag write-back math.
   const [showProjection, setShowProjection] = useState(false)
   const showProjectionRef = useRef(showProjection)
+  // Source A shows by default; source B starts hidden so it doesn't crowd
+  // the primary source's own items on first load. Each checkbox only hides
+  // that source's own items — a row that still has the other source's items
+  // keeps its place, only a row left completely empty by the toggle
+  // disappears (see visibleGroups/pruneEmptyGroups).
+  const [hideSourceA, setHideSourceA] = useState(false)
+  const [hideSourceB, setHideSourceB] = useState(true)
   // Item id -> real (unwidened) display end, kept alongside
   // widenedByItemIdRef so onMove can recover how much a behind-schedule
   // item's end was widened by, to compensate a drag on it (see onMove).
@@ -191,6 +199,22 @@ export function LiveTimeline({
   const { items, groups, visuals } = useMemo(
     () => mergeSecondarySource(primary, config, dataB),
     [primary, config, dataB],
+  )
+
+  // Hiding a source filters which items are drawn; a row that still has the
+  // other source's items in it is untouched, but a row left with nothing at
+  // all is pruned too (see pruneEmptyGroups) rather than lingering as an
+  // empty swimlane.
+  const visibleItems = useMemo(
+    () =>
+      items.filter((item) =>
+        isSourceBItemId(item.id) ? !hideSourceB : !hideSourceA,
+      ),
+    [items, hideSourceA, hideSourceB],
+  )
+  const visibleGroups = useMemo(
+    () => pruneEmptyGroups(groups, visibleItems),
+    [groups, visibleItems],
   )
 
   useEffect(() => {
@@ -538,13 +562,22 @@ export function LiveTimeline({
       // each edit. Untouched rows are now left alone entirely. (A real
       // content change can still legitimately alter a lane's stacked height,
       // which is what withPreservedVerticalScroll guards against.)
-      syncDataSet(groupsDs, groups)
+      syncDataSet(groupsDs, visibleGroups)
 
       // setGroups() rebinds the Timeline's rendering to the groups source and
       // resets its internal scroll — only call it on an actual grouped <->
       // ungrouped transition, not every time (groupsDs is the same instance
       // on every render; re-passing it is a no-op vis can't distinguish from
       // "start over").
+      //
+      // Deliberately keyed on the unfiltered `groups` (is grouping configured
+      // at all?), not `visibleGroups` (is anything currently toggled on?):
+      // hiding both sources can empty visibleGroups down to zero, and
+      // detaching groups via setGroups(undefined) then reattaching later
+      // left the Timeline stuck with nothing drawable, with no way back
+      // in — same instance, so re-checking a box couldn't recover it. The
+      // groupsDs *contents* still shrink to zero via syncDataSet above;
+      // only the attach/detach itself needs to stay structural.
       const hasGroups = groups.length > 0
       if (groupsAttachedRef.current !== hasGroups) {
         tl.setGroups(hasGroups ? groupsDs : undefined)
@@ -558,7 +591,7 @@ export function LiveTimeline({
       // overrun as this item's real footprint, so it correctly bumps a
       // colliding sibling out of the way.
       const itemsToSync = showProjection
-        ? items.map((item) => {
+        ? visibleItems.map((item) => {
             const widened = widenedByItemId.get(String(item.id))
             if (!widened) return item
             return {
@@ -567,16 +600,16 @@ export function LiveTimeline({
               ...(widened.style ? { style: widened.style } : {}),
             }
           })
-        : items
+        : visibleItems
       syncDataSet(itemsDs, itemsToSync, new Set(weekendIdsRef.current))
       syncWeekends()
     })
-  }, [items, widenedByItemId, groups, syncWeekends, showProjection])
+  }, [visibleItems, widenedByItemId, visibleGroups, groups, syncWeekends, showProjection])
 
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.startDate || !config?.endDate
 
-  const laneCount = groups.filter(
+  const laneCount = visibleGroups.filter(
     (g) => !g.nestedGroups || g.nestedGroups.length === 0,
   ).length
 
@@ -594,11 +627,31 @@ export function LiveTimeline({
               : missingCols
                 ? 'Pick Start and End columns in the editor panel.'
                 : laneCount === 0
-                  ? `${items.length} item${items.length === 1 ? '' : 's'}.`
-                  : `${items.length} item${items.length === 1 ? '' : 's'} across ${laneCount} lane${laneCount === 1 ? '' : 's'}.`}
+                  ? `${visibleItems.length} item${visibleItems.length === 1 ? '' : 's'}.`
+                  : `${visibleItems.length} item${visibleItems.length === 1 ? '' : 's'} across ${laneCount} lane${laneCount === 1 ? '' : 's'}.`}
           </p>
         </div>
         <div className="timeline-toolbar">
+          {hasSource && (
+            <label className="timeline-projection-toggle">
+              <input
+                type="checkbox"
+                checked={!hideSourceA}
+                onChange={(e) => setHideSourceA(!e.target.checked)}
+              />
+              Show primary source
+            </label>
+          )}
+          {config?.sourceB && (
+            <label className="timeline-projection-toggle">
+              <input
+                type="checkbox"
+                checked={!hideSourceB}
+                onChange={(e) => setHideSourceB(!e.target.checked)}
+              />
+              Show second source
+            </label>
+          )}
           {config?.projectedEndColumn && (
             <label className="timeline-projection-toggle">
               <input
