@@ -406,12 +406,34 @@
   font-weight: 500;
 }
 
-/* Optional external-doc link: when configured, the whole item becomes
-   clickable rather than a separate glyph. `display: contents` means the
-   anchor itself doesn't participate in layout at all — the wrapped
+/* Source A's optional external-doc link: a small, separate glyph (not the
+   whole pill — see templates.ts for why dragging needs that distinction),
+   rendered first (left of the pill) so it stays visible as a wide item
+   scrolls past the edge. */
+.ts-item-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  color: #2563eb;
+  font-size: 11px;
+  line-height: 1;
+  text-decoration: none;
+}
+.ts-item-link:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+/* Source B's optional external-doc link: the whole item is clickable rather
+   than a separate glyph (source B is never draggable, so there's no
+   click-vs-drag conflict to avoid). `display: contents` means the anchor
+   itself doesn't participate in layout at all — the wrapped
    .ts-item-wrapper's own flex layout is unaffected, this just adds
    click-to-navigate semantics around it. */
-.ts-item-link {
+.ts-item-link-wrap {
   display: contents;
   color: inherit;
   text-decoration: none;

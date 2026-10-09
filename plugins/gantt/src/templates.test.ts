@@ -78,19 +78,45 @@ describe('renderItemContent', () => {
     }
   })
 
-  test('wraps the whole item in a link when linkUrl is set, opening in a new tab', () => {
+  test('source A (draggable): renders a small link glyph, not a whole-item wrap', () => {
+    // Source A items can be dragged — wrapping the whole pill in a link
+    // would swallow the click a drag gesture starts with, so it gets a
+    // small, separate glyph instead, left of the pill.
     const visuals = new Map<string, ItemVisual>([
       ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
     ])
     const out = renderItemContent(makeItem('x', 'Task'), visuals)
     expect(out).toBeInstanceOf(HTMLElement)
+    const wrapper = out as HTMLElement
+    expect(wrapper.className).toBe('ts-item-wrapper')
+    const link = wrapper.querySelector<HTMLAnchorElement>('a.ts-item-link')
+    expect(link).not.toBeNull()
+    expect(link!.getAttribute('href')).toBe('https://example.com/r/1')
+    expect(link!.target).toBe('_blank')
+    expect(link!.rel).toContain('noopener')
+    expect(link!.textContent).toBe('↗')
+    // Left-anchored: first child, before the pill.
+    expect(wrapper.firstElementChild).toBe(link)
+  })
+
+  test('source B (never draggable): wraps the whole item in a link instead of a glyph', () => {
+    // Source B ids are prefixed "b|" (see secondarySource.ts) and are always
+    // editable: false, so there's no drag gesture for a whole-item link to
+    // conflict with.
+    const visuals = new Map<string, ItemVisual>([
+      ['b|x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
+    ])
+    const out = renderItemContent(makeItem('b|x', 'Task'), visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
     expect((out as HTMLElement).tagName).toBe('A')
     const link = out as HTMLAnchorElement
-    expect(link.className).toBe('ts-item-link')
+    expect(link.className).toBe('ts-item-link-wrap')
     expect(link.getAttribute('href')).toBe('https://example.com/r/1')
     expect(link.target).toBe('_blank')
     expect(link.rel).toContain('noopener')
-    // The pill/text content lives inside the link, structure unchanged.
+    // No small glyph in this mode — the pill/text content lives directly
+    // inside the whole-item link.
+    expect(link.querySelector('.ts-item-link')).toBeNull()
     expect(link.querySelector('.ts-item-wrapper')).not.toBeNull()
     expect(link.querySelector('.ts-pill')?.textContent).toBe('P0')
     expect(link.querySelector('.ts-item-text')?.textContent).toBe('Task')
