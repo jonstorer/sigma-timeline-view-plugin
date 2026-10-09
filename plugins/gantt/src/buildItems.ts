@@ -1,5 +1,5 @@
 import type { DataGroup, DataItem } from 'vis-timeline/esnext'
-import { addDays, dayBoundDisplaySpan, parseCellDate } from './weekSpan'
+import { addDays, dayBoundDisplaySpan, exactDisplaySpan, parseCellDate } from './weekSpan'
 import type {
   BuildResult,
   GroupPath,
@@ -229,10 +229,20 @@ interface GroupNode {
   nestedGroups: Set<string>
 }
 
+export interface BuildItemsOptions {
+  /** Use the row's exact start/end instant instead of day-flooring it —
+   * for data with genuine sub-day boundaries (e.g. an on-call shift).
+   * Defaults to false (day-bound), matching the primary Gantt's week/day
+   * granularity. */
+  exactTime?: boolean
+}
+
 export function buildItemsAndGroups(
   config: TimelineConfig | null | undefined,
   data: Record<string, unknown[]> | undefined,
+  options?: BuildItemsOptions,
 ): BuildResult {
+  const resolveSpan = options?.exactTime ? exactDisplaySpan : dayBoundDisplaySpan
   const visuals = new Map<string, ItemVisual>()
   const rowIdByItemId = new Map<string, unknown>()
   const originalPathByItemId = new Map<string, GroupPath>()
@@ -305,11 +315,13 @@ export function buildItemsAndGroups(
   }
 
   for (let i = 0; i < rowCount; i++) {
-    // Bind to whole day columns on read — NOT snapped to Mon/Fri weeks. The
-    // sheet's stored dates render as-is (an off-week row looks off-week);
-    // only dragging (see LiveTimeline's onMoving/onMove) enforces the weekly
-    // grain. Rows whose dates don't parse at all are skipped.
-    const span = dayBoundDisplaySpan(starts[i], ends[i])
+    // Day-bound (default): bind to whole day columns on read — NOT snapped
+    // to Mon/Fri weeks. The sheet's stored dates render as-is (an off-week
+    // row looks off-week); only dragging (see LiveTimeline's onMoving/
+    // onMove) enforces the weekly grain. exactTime (source B): use the raw
+    // instant instead — see exactDisplaySpan. Either way, rows whose dates
+    // don't parse at all are skipped.
+    const span = resolveSpan(starts[i], ends[i])
     if (!span) continue
 
     const rowId = idCol ? ids[i] : `__row_${i}`

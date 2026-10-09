@@ -272,7 +272,13 @@ export function LiveTimeline({
         // `item.vertical / 2` at the bottom, so a small vertical left items
         // flush against the lane bottom. Bump vertical for a real bottom gap
         // (also widens spacing between stacked items, the same knob).
-        item: { vertical: 24, horizontal: 10 },
+        //
+        // horizontal is 0, not some breathing-room value, because margin is
+        // measured in pixels, not time: any positive value forces back-to-
+        // back items (zero time gap, e.g. two contiguous on-call shifts in
+        // source B) onto separate stacked lines, since their rendered gap is
+        // always 0px — less than any positive margin, at any zoom level.
+        item: { vertical: 24, horizontal: 0 },
         axis: 24,
       },
       verticalScroll: true,

@@ -612,6 +612,32 @@ describe('buildItemsAndGroups day-bound display (no week snapping on read)', () 
   })
 })
 
+describe('buildItemsAndGroups exactTime option', () => {
+  const config = { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' }
+
+  test('without the option, a sub-day span is floored to full days (default/unchanged behavior)', () => {
+    const data = {
+      start_col: ['2026-05-04T16:30:00Z'],
+      end_col: ['2026-05-04T22:00:00Z'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].start).toEqual(new Date(2026, 4, 4))
+    expect(result.items[0].end).toEqual(new Date(2026, 4, 5))
+  })
+
+  test('with exactTime: true, the exact instant is kept, no day-flooring or +1-day offset', () => {
+    const data = {
+      start_col: ['2026-05-04T16:30:00Z'],
+      end_col: ['2026-05-04T22:00:00Z'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(config, data, { exactTime: true })
+    expect(result.items[0].start).toEqual(new Date(Date.UTC(2026, 4, 4, 16, 30, 0)))
+    expect(result.items[0].end).toEqual(new Date(Date.UTC(2026, 4, 4, 22, 0, 0)))
+  })
+})
+
 describe('pathToGroupId', () => {
   test('joins path segments with pipe', () => {
     expect(pathToGroupId(['NA', 'Team Alpha', 'Alice'], 2)).toBe(

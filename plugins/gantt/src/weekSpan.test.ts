@@ -3,9 +3,11 @@ import {
   addDays,
   dayBoundDisplaySpan,
   displayEndToDataEnd,
+  exactDisplaySpan,
   formatSigmaDateTime,
   nearestWeekStart,
   parseCellDate,
+  parseInstant,
   snapDisplaySpan,
   toLocalDate,
   weekStart,
@@ -118,6 +120,50 @@ describe('parseCellDate', () => {
   })
 })
 
+describe('parseInstant', () => {
+  const expectInstant = (d: Date | null, utc: number) => {
+    expect(d?.getTime()).toBe(utc)
+  }
+
+  test('keeps the time-of-day, unlike parseCellDate', () => {
+    expectInstant(
+      parseInstant('2026-05-04T16:30:00Z'),
+      Date.UTC(2026, 4, 4, 16, 30, 0),
+    )
+  })
+
+  test('epoch ms', () => {
+    expectInstant(
+      parseInstant(Date.UTC(2026, 4, 4, 9, 15, 0)),
+      Date.UTC(2026, 4, 4, 9, 15, 0),
+    )
+  })
+
+  test('a Date object', () => {
+    const d = new Date(Date.UTC(2026, 4, 4, 9, 15, 0))
+    expectInstant(parseInstant(d), d.getTime())
+  })
+
+  test('the naive write-back shape ("Y-M-D H:M:S"), read as UTC', () => {
+    expectInstant(
+      parseInstant('2026-05-04 16:30:00'),
+      Date.UTC(2026, 4, 4, 16, 30, 0),
+    )
+  })
+
+  test('null, undefined, and empty string are all null (not "now")', () => {
+    expect(parseInstant(null)).toBeNull()
+    expect(parseInstant(undefined)).toBeNull()
+    expect(parseInstant('')).toBeNull()
+  })
+
+  test('garbage input is null', () => {
+    expect(parseInstant('N/A')).toBeNull()
+    expect(parseInstant(NaN)).toBeNull()
+    expect(parseInstant({})).toBeNull()
+  })
+})
+
 describe('toLocalDate', () => {
   test('a Date passes through unchanged', () => {
     const d = new Date(2026, 4, 4, 13, 30)
@@ -182,6 +228,31 @@ describe('dayBoundDisplaySpan', () => {
     const span = dayBoundDisplaySpan('2026-03-04', '2026-03-11')
     expect(span?.start.getHours()).toBe(0)
     expect(span?.end.getHours()).toBe(0)
+  })
+})
+
+describe('exactDisplaySpan', () => {
+  test('keeps the exact start/end instant, no day-flooring and no +1-day adjustment', () => {
+    const span = exactDisplaySpan('2026-05-04T16:30:00Z', '2026-05-05T09:00:00Z')
+    expect(span?.start.getTime()).toBe(Date.UTC(2026, 4, 4, 16, 30, 0))
+    expect(span?.end.getTime()).toBe(Date.UTC(2026, 4, 5, 9, 0, 0))
+  })
+
+  test('a span entirely within one calendar day is not widened to a full day', () => {
+    const span = exactDisplaySpan('2026-05-04T13:50:00Z', '2026-05-04T16:00:00Z')
+    expect(span?.start.getTime()).toBe(Date.UTC(2026, 4, 4, 13, 50, 0))
+    expect(span?.end.getTime()).toBe(Date.UTC(2026, 4, 4, 16, 0, 0))
+  })
+
+  test('an inverted end (before start) clamps to start, not widened to a day', () => {
+    const span = exactDisplaySpan('2026-05-04T16:00:00Z', '2026-05-04T10:00:00Z')
+    expect(span?.start.getTime()).toBe(span?.end.getTime())
+  })
+
+  test('null or unparseable start/end yields null', () => {
+    expect(exactDisplaySpan(null, '2026-05-08T00:00:00Z')).toBeNull()
+    expect(exactDisplaySpan('2026-05-04T00:00:00Z', null)).toBeNull()
+    expect(exactDisplaySpan('garbage', 'garbage')).toBeNull()
   })
 })
 

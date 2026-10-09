@@ -9,26 +9,9 @@ export function renderItemContent(
   const visual = visualsByItemId.get(id)
   const text = typeof item.content === 'string' ? item.content : ''
   if (!visual) return text
+
   const wrapper = document.createElement('span')
   wrapper.className = 'ts-item-wrapper'
-  // Link first (before the pill), left-anchored: it rides the content vis keeps
-  // visible, so it stays on screen even when a wide item scrolls past the edge.
-  if (visual.linkUrl) {
-    const link = document.createElement('a')
-    link.className = 'ts-item-link'
-    link.href = visual.linkUrl
-    link.target = '_blank'
-    link.rel = 'noopener noreferrer'
-    link.title = 'Open link in a new tab'
-    link.textContent = '↗'
-    // Stop the pointer/click from reaching vis-timeline so the anchor opens
-    // instead of starting an item drag or firing the select action; the
-    // anchor's own default click still navigates (in a new tab).
-    for (const type of ['pointerdown', 'mousedown', 'click']) {
-      link.addEventListener(type, (e) => e.stopPropagation())
-    }
-    wrapper.appendChild(link)
-  }
   if (visual.pill) {
     const pillEl = document.createElement('span')
     pillEl.className = 'ts-pill'
@@ -40,5 +23,21 @@ export function renderItemContent(
   textEl.className = 'ts-item-text'
   textEl.textContent = text
   wrapper.appendChild(textEl)
-  return wrapper
+
+  if (!visual.linkUrl) return wrapper
+
+  // The whole item is the link when a URL is configured — not a separate
+  // glyph. Only `click` is stopped from reaching vis-timeline (so it doesn't
+  // also register as a selection); pointerdown/pointermove are left alone,
+  // so dragging an editable item still works — a drag gesture never fires a
+  // plain `click` event, only a genuine no-movement click does.
+  const link = document.createElement('a')
+  link.className = 'ts-item-link'
+  link.href = visual.linkUrl
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  link.title = 'Open link in a new tab'
+  link.appendChild(wrapper)
+  link.addEventListener('click', (e) => e.stopPropagation())
+  return link
 }
