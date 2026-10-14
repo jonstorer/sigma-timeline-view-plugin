@@ -182,9 +182,10 @@ describe('LiveTimeline', () => {
 
 describe('LiveTimeline projection toggle', () => {
   test('hides the checkbox when no projectedEndColumn is configured', () => {
-    const { queryByLabelText, container } = render(
+    const { getByLabelText, queryByLabelText, container } = render(
       <LiveTimeline config={oneRowConfig} data={oneRowData} />,
     )
+    fireEvent.click(getByLabelText(/display settings/i))
     expect(queryByLabelText(/show projected completion/i)).not.toBeInTheDocument()
     expect(container.querySelector('.timeline-host')).not.toHaveClass(
       'show-projection',
@@ -198,6 +199,7 @@ describe('LiveTimeline projection toggle', () => {
         data={{ ...oneRowData, projected_col: ['2026-05-11'] }}
       />,
     )
+    fireEvent.click(getByLabelText(/display settings/i))
     const checkbox = getByLabelText(/show projected completion/i)
     expect(checkbox).not.toBeChecked()
     expect(container.querySelector('.timeline-host')).not.toHaveClass(
@@ -216,6 +218,7 @@ describe('LiveTimeline projection toggle', () => {
       />,
     )
     const host = container.querySelector('.timeline-host')!
+    fireEvent.click(getByLabelText(/display settings/i))
     const checkbox = getByLabelText(/show projected completion/i)
 
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
@@ -249,6 +252,7 @@ describe('LiveTimeline projection toggle', () => {
         data={{ ...oneRowData, projected_col: ['2026-05-11'] }} // behind schedule
       />,
     )
+    fireEvent.click(getByLabelText(/display settings/i))
     const checkbox = getByLabelText(/show projected completion/i)
 
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
@@ -296,42 +300,61 @@ describe('LiveTimeline source visibility toggles', () => {
     group_b: ['Alice'],
   }
 
-  test('shows primary source toggle but not second source toggle when sourceB is unconfigured', () => {
+  test('shows Source A toggle but not Source B toggle when sourceB is unconfigured', () => {
     const { getByLabelText, queryByLabelText } = render(
       <LiveTimeline config={oneRowConfig} data={oneRowData} />,
     )
-    expect(getByLabelText(/show primary source/i)).toBeChecked()
-    expect(queryByLabelText(/show second source/i)).not.toBeInTheDocument()
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(getByLabelText(/show source a/i)).toBeChecked()
+    expect(queryByLabelText(/show source b/i)).not.toBeInTheDocument()
   })
 
-  test('shows both toggles when sourceB is configured; primary checked, second source starts unchecked', () => {
+  test('shows both toggles when sourceB is configured; Source A checked, Source B starts unchecked', () => {
     const { getByLabelText } = render(
       <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
     )
-    expect(getByLabelText(/show primary source/i)).toBeChecked()
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(getByLabelText(/show source a/i)).toBeChecked()
     // Starts hidden so it doesn't crowd the primary source on first load.
-    expect(getByLabelText(/show second source/i)).not.toBeChecked()
+    expect(getByLabelText(/show source b/i)).not.toBeChecked()
   })
 
-  test('unchecking "show primary source" hides source-A items, and prunes a row left fully empty', () => {
+  test('custom sourceAName/sourceBName relabel the toggles, not the default "Source A"/"Source B"', () => {
+    const { getByLabelText, queryByLabelText } = render(
+      <LiveTimeline
+        config={{ ...twoSourceConfig, sourceAName: 'Roadmap', sourceBName: 'On-Call' }}
+        data={twoSourceData}
+        dataB={dataB}
+      />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(getByLabelText(/show roadmap/i)).toBeInTheDocument()
+    expect(getByLabelText(/show on-call/i)).toBeInTheDocument()
+    expect(queryByLabelText(/show source a/i)).not.toBeInTheDocument()
+    expect(queryByLabelText(/show source b/i)).not.toBeInTheDocument()
+  })
+
+  test('unchecking "show source a" hides source-A items, and prunes a row left fully empty', () => {
     const { getByLabelText, getByText } = render(
       <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
     )
     // Source B starts hidden: only the 2 primary items show, across 2 lanes.
     expect(getByText(/2 items across 2 lanes/i)).toBeInTheDocument()
 
-    fireEvent.click(getByLabelText(/show primary source/i))
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show source a/i))
     // Both rows now have nothing visible at all (source B is still hidden).
     expect(getByText(/^0 items\.$/i)).toBeInTheDocument()
   })
 
-  test('checking "show second source" reveals source-B items alongside the primary source', () => {
+  test('checking "show source b" reveals source-B items alongside the primary source', () => {
     const { getByLabelText, getByText } = render(
       <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
     )
     expect(getByText(/2 items across 2 lanes/i)).toBeInTheDocument()
 
-    fireEvent.click(getByLabelText(/show second source/i))
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show source b/i))
     // Alice: primary + source-B items. Bob: primary item only. Still 2 lanes.
     expect(getByText(/^3 items across 2 lanes\.$/i)).toBeInTheDocument()
   })
@@ -341,7 +364,8 @@ describe('LiveTimeline source visibility toggles', () => {
       <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
     )
     // Second source already starts hidden — just hide the primary too.
-    fireEvent.click(getByLabelText(/show primary source/i))
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show source a/i))
     expect(getByText(/^0 items\.$/i)).toBeInTheDocument()
   })
 
@@ -359,11 +383,23 @@ describe('LiveTimeline source visibility toggles', () => {
 
     // Second source already starts hidden — hide the primary too, so both
     // are off at once.
-    fireEvent.click(getByLabelText(/show primary source/i))
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show source a/i))
     expect(setGroups).not.toHaveBeenCalledWith(undefined)
 
-    fireEvent.click(getByLabelText(/show primary source/i))
+    fireEvent.click(getByLabelText(/show source a/i))
     expect(setGroups).not.toHaveBeenCalledWith(undefined)
+  })
+
+  test('the settings menu closes on an outside click', () => {
+    const { getByLabelText, queryByLabelText, container } = render(
+      <LiveTimeline config={twoSourceConfig} data={twoSourceData} dataB={dataB} />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(getByLabelText(/show source a/i)).toBeInTheDocument()
+
+    fireEvent.pointerDown(container.querySelector('.timeline-header-text')!)
+    expect(queryByLabelText(/show source a/i)).not.toBeInTheDocument()
   })
 })
 
@@ -536,6 +572,7 @@ describe('LiveTimeline drag editing', () => {
     )
     // Turn the toggle on so the item is actually rendered widened — the
     // compensation only applies while showProjection is true.
+    fireEvent.click(getByLabelText(/display settings/i))
     fireEvent.click(getByLabelText(/show projected completion/i))
 
     const callback = vi.fn()

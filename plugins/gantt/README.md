@@ -187,9 +187,10 @@ formula a workbook-level decision you can change without a plugin deploy.
 |---|---|---|
 | `projectedEndColumn` | column (datetime) | Per-row projected completion date, computed in Sigma. |
 
-A header checkbox ("Show projected completion") only appears once this slot
-is configured, and toggles the overlay on/off. It's a plain UI toggle — it
-doesn't persist across reloads and isn't wired to a Sigma variable.
+A checkbox in the header's display settings menu ("Show projected
+completion") only appears once this slot is configured, and toggles the
+overlay on/off. It's a plain UI toggle — it doesn't persist across reloads
+and isn't wired to a Sigma variable.
 
 **Visual.** Compares the projected date against the item's own stored end:
 
@@ -284,15 +285,28 @@ source — wrapping a draggable item's whole pill in a link swallows the click
 a drag gesture starts with, but source B is never draggable, so there's no
 such conflict to avoid.
 
-### Show/hide each source
+### Display settings menu
 
-Two header checkboxes — **Show primary source** and **Show second
-source** — let you toggle each source's items on and off independently.
-Primary starts checked; second source starts **unchecked**, so it doesn't
-crowd the primary source's own items the moment it's configured — check it
-on when you actually want to see it overlaid. "Show second source" only
-appears once `sourceB` is configured, same as the projected-completion
-checkbox only appearing once that slot is configured.
+A gear button in the header opens a dropdown with up to three checkboxes:
+**Show Source A**, **Show Source B** (only once `sourceB` is configured),
+and **Show projected completion** (only once `projectedEndColumn` is
+configured) — same conditional-appearance rule as before, just consolidated
+into one menu instead of always-visible header checkboxes. The menu stays
+open while you check things inside it; it only closes on an outside click.
+
+| Slot | Type | Purpose |
+|---|---|---|
+| `sourceAName` | text (optional) | Relabels "Show Source A" in the menu, e.g. "Show Roadmap". |
+| `sourceBName` | text (optional) | Relabels "Show Source B" in the menu, e.g. "Show On-Call". |
+
+These are purely cosmetic and only affect the plugin's own rendered menu —
+Sigma's editor-panel field labels are static and can't be driven by another
+field's value, so "Data source" / "Second source" etc. in the editor panel
+itself always say that, regardless of what you type here.
+
+Source A starts checked; Source B starts **unchecked**, so it doesn't crowd
+the primary source's own items the moment it's configured — check it on
+when you actually want to see it overlaid.
 
 Hiding a source only removes *its own* items — a row that still has the
 other source's items in it keeps its place. A row left with nothing in it

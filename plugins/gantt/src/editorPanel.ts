@@ -6,6 +6,18 @@ export const SOURCE_B = 'sourceB'
 export const editorPanelConfig: CustomPluginConfigOptions[] = [
   { name: SOURCE, type: 'element', label: 'Data source' },
 
+  // Purely cosmetic — only ever used to relabel this source in the plugin's
+  // own rendered show/hide menu (e.g. "Show Roadmap" instead of "Show
+  // Source A"). Sigma's editor-panel field labels are static, so this can't
+  // relabel anything in this panel itself — "Data source" above still just
+  // says that, during setup it's always "Source A"/"Source B".
+  {
+    name: 'sourceAName',
+    type: 'text',
+    label: 'Source A name (optional — used in the show/hide menu)',
+    placeholder: 'Source A',
+  },
+
   {
     name: 'idColumn',
     type: 'column',
@@ -143,6 +155,14 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     name: SOURCE_B,
     type: 'element',
     label: 'Second source (optional, read-only)',
+  },
+
+  // Same purely-cosmetic role as sourceAName above, for Source B.
+  {
+    name: 'sourceBName',
+    type: 'text',
+    label: 'Source B name (optional — used in the show/hide menu)',
+    placeholder: 'Source B',
   },
 
   {
