@@ -20,6 +20,14 @@ export interface TimelineConfig {
   highlightColorColumn?: string
   progressColumn?: string
   projectedEndColumn?: string
+  /** First child ticket's actual "in progress" transition time, independent
+   * of the planned start above. Both this and projectedActualEndColumn must
+   * be set for the actual-dates overlay to render — see buildItems.ts's
+   * resolveActualOverlay. */
+  actualStartColumn?: string
+  /** Projected finish based on the actual start, not the planned start —
+   * paired with actualStartColumn. */
+  projectedActualEndColumn?: string
   pillLabelColumn?: string
   pillColorColumn?: string
   linkColumn?: string

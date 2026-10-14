@@ -52,6 +52,12 @@ and exposes its config slots in Sigma's editor panel.
 
 ## Editor-panel config
 
+Source A's date-related fields are grouped into labeled sub-sections in the
+editor panel (Planned dates / Actual dates / Other fields) purely to keep a
+growing field list navigable — the grouping is cosmetic (Sigma's `group`
+config type is just a heading, no data of its own) and has no effect on the
+sections documented below.
+
 ### Data (required)
 
 | Slot | Type | Purpose |
@@ -223,6 +229,38 @@ Undefined when `[Progress]` is 0 (no pace yet) — guard for that in your
 formula (e.g. return `[End]` or null) so the column doesn't produce a
 divide-by-zero result for not-yet-started items.
 
+### Actual dates (optional)
+
+For when you can additionally surface when work *actually* started and when
+it's now projected to actually finish — e.g. the datetime the first child
+ticket of an epic transitioned to in progress — alongside (not instead of)
+the planned Start/End/Projected-completion dates above. Fully independent of
+[Projected completion](#projected-completion-optional): both can be
+configured and toggled on at the same time, and turning one on has no effect
+on the other.
+
+| Slot | Type | Purpose |
+|---|---|---|
+| `actualStartColumn` | column (datetime) | Per-row actual start date. |
+| `projectedActualEndColumn` | column (datetime) | Per-row projected finish date, computed from the actual start rather than the planned start. |
+
+Both columns must be configured (and both must resolve to a value on a given
+row) for anything to render — half the pair isn't enough to place a span.
+
+**Visual.** A translucent, dashed-border band spans Actual Start → Projected
+Actual End, rendered *behind* the solid planned bar and scoped to the same
+row. The planned bar itself never changes size or position — wherever the
+band's edges fall outside the planned bar's own edges, it visibly "pokes
+out," showing slippage (or an earlier-than-planned actual start) as an
+overhang rather than a number you have to go read elsewhere.
+
+A checkbox in the header's display settings menu ("Show actual dates") only
+appears once both slots are configured, same conditional-appearance pattern
+as the projected-completion checkbox. It's a plain UI toggle, off by default
+so it doesn't appear uninvited — it doesn't persist across reloads and isn't
+wired to a Sigma variable. Hiding Source A also hides the overlay even while
+the checkbox is checked, since the overlay is Source-A-only.
+
 ### Second source (optional)
 
 For overlaying a second, independently-configured table on the same chart —
@@ -287,12 +325,14 @@ such conflict to avoid.
 
 ### Display settings menu
 
-A gear button in the header opens a dropdown with up to three checkboxes:
+A gear button in the header opens a dropdown with up to four checkboxes:
 **Show Source A**, **Show Source B** (only once `sourceB` is configured),
-and **Show projected completion** (only once `projectedEndColumn` is
-configured) — same conditional-appearance rule as before, just consolidated
-into one menu instead of always-visible header checkboxes. The menu stays
-open while you check things inside it; it only closes on an outside click.
+**Show projected completion** (only once `projectedEndColumn` is
+configured), and **Show actual dates** (only once both `actualStartColumn`
+and `projectedActualEndColumn` are configured) — same conditional-appearance
+rule for each, all consolidated into one menu instead of always-visible
+header checkboxes. The menu stays open while you check things inside it; it
+only closes on an outside click.
 
 | Slot | Type | Purpose |
 |---|---|---|

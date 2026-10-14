@@ -67,6 +67,40 @@ describe('editorPanelConfig', () => {
     expect(byName.linkColumn).toMatchObject({ source: SOURCE })
   })
 
+  test('actual-dates columns source from SOURCE and accept datetime columns', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.actualStartColumn).toMatchObject({
+      type: 'column',
+      source: SOURCE,
+      allowedTypes: ['datetime'],
+    })
+    expect(byName.projectedActualEndColumn).toMatchObject({
+      type: 'column',
+      source: SOURCE,
+      allowedTypes: ['datetime'],
+    })
+  })
+
+  test('Source A fields are grouped into planned/actual/other sub-sections', () => {
+    const names = editorPanelConfig.map((e) => e.name)
+    const groupNames = editorPanelConfig
+      .filter((e) => e.type === 'group')
+      .map((e) => e.name)
+    expect(groupNames).toEqual([
+      'plannedDatesGroup',
+      'actualDatesGroup',
+      'otherFieldsGroup',
+    ])
+    // Each date column sits after its section's group heading and before the
+    // next one, i.e. the headings actually bracket the fields they describe.
+    const indexOf = (name: string) => names.indexOf(name)
+    expect(indexOf('plannedDatesGroup')).toBeLessThan(indexOf('startDate'))
+    expect(indexOf('startDate')).toBeLessThan(indexOf('actualDatesGroup'))
+    expect(indexOf('actualDatesGroup')).toBeLessThan(indexOf('actualStartColumn'))
+    expect(indexOf('actualStartColumn')).toBeLessThan(indexOf('otherFieldsGroup'))
+    expect(indexOf('otherFieldsGroup')).toBeLessThan(indexOf('highlightColorColumn'))
+  })
+
   test('edit slots are present: text variable + action trigger', () => {
     const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
     expect(byName.editPayloadVariable).toMatchObject({

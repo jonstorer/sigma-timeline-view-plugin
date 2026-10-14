@@ -3,10 +3,12 @@ import {
   applyLaneMove,
   buildItemsAndGroups,
   buildPathsForRow,
+  isActualOverlayItemId,
   parseGroupCell,
   parseGroupId,
   parseProgress,
   pathToGroupId,
+  resolveActualOverlay,
   resolveProjection,
   safeId,
 } from './buildItems'
@@ -924,6 +926,137 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     const result = buildItemsAndGroups(config, data)
     expect(result.items[0].className).toBeUndefined()
     expect(result.widenedByItemId.size).toBe(0)
+  })
+})
+
+describe('resolveActualOverlay', () => {
+  test('both dates present: a span from the actual start through the day after the projected actual end', () => {
+    expect(resolveActualOverlay('2026-05-04', '2026-05-11')).toEqual({
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 12),
+    })
+  })
+
+  test('missing actual start: no overlay', () => {
+    expect(resolveActualOverlay(null, '2026-05-11')).toBeNull()
+    expect(resolveActualOverlay(undefined, '2026-05-11')).toBeNull()
+  })
+
+  test('missing projected actual end: no overlay', () => {
+    expect(resolveActualOverlay('2026-05-04', null)).toBeNull()
+    expect(resolveActualOverlay('2026-05-04', undefined)).toBeNull()
+  })
+
+  test('unparseable values: no overlay', () => {
+    expect(resolveActualOverlay('garbage', '2026-05-11')).toBeNull()
+    expect(resolveActualOverlay('2026-05-04', 'garbage')).toBeNull()
+  })
+
+  test('projected actual end before actual start: degenerate span, no overlay', () => {
+    expect(resolveActualOverlay('2026-05-11', '2026-05-04')).toBeNull()
+  })
+})
+
+describe('isActualOverlayItemId', () => {
+  test('matches an overlay id built from a main item id', () => {
+    expect(isActualOverlayItemId('r1::actual')).toBe(true)
+  })
+
+  test('does not match the main item id, other ids, or non-strings', () => {
+    expect(isActualOverlayItemId('r1')).toBe(false)
+    expect(isActualOverlayItemId('b|r1')).toBe(false)
+    expect(isActualOverlayItemId(42)).toBe(false)
+    expect(isActualOverlayItemId(undefined)).toBe(false)
+  })
+})
+
+describe('buildItemsAndGroups actual-dates overlay', () => {
+  const config = {
+    startDate: 'start_col',
+    endDate: 'end_col',
+    idColumn: 'id_col',
+    actualStartColumn: 'actual_start_col',
+    projectedActualEndColumn: 'projected_actual_end_col',
+  }
+
+  test('both columns configured and present: a background overlay item alongside the main item', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: ['2026-05-05'],
+      projected_actual_end_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items).toHaveLength(2)
+    const overlay = result.items.find((i) => isActualOverlayItemId(i.id))
+    expect(overlay).toMatchObject({
+      id: 'r1::actual',
+      type: 'background',
+      start: new Date(2026, 4, 5),
+      end: new Date(2026, 4, 12),
+      className: 'ts-actual-overlay',
+    })
+    // The main item is untouched by the overlay's presence.
+    expect(result.items.find((i) => i.id === 'r1')).toMatchObject({
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 9),
+    })
+  })
+
+  test('overlay item is scoped to the same group as its main item', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      group_col: ['Alice'],
+      actual_start_col: ['2026-05-05'],
+      projected_actual_end_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups({ ...config, group: 'group_col' }, data)
+    const main = result.items.find((i) => !isActualOverlayItemId(i.id))
+    const overlay = result.items.find((i) => isActualOverlayItemId(i.id))
+    expect(overlay?.group).toBe(main?.group)
+    expect(overlay?.id).toBe(`${main?.id}::actual`)
+  })
+
+  test('only one of the two columns configured: no overlay item', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: ['2026-05-05'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, projectedActualEndColumn: undefined },
+      data,
+    )
+    expect(result.items).toHaveLength(1)
+  })
+
+  test('neither column configured: no overlay item', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' },
+      data,
+    )
+    expect(result.items).toHaveLength(1)
+  })
+
+  test('columns configured but the row has no actual-date values: no overlay item', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: [null],
+      projected_actual_end_col: [null],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items).toHaveLength(1)
   })
 })
 

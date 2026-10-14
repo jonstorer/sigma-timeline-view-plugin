@@ -252,6 +252,28 @@
   );
 }
 
+/* Actual-dates overlay (buildItems.ts's resolveActualOverlay): a translucent
+   band spanning Actual Start -> Projected Actual End, behind the planned bar
+   (background items render behind range items) and scoped to its own row via
+   `group`. Slimmer than the full lane and vertically centered so it reads as
+   a second, independent span rather than a full-height wash like the weekend
+   bands above — wherever actual dates diverge from planned, it pokes out past
+   the solid bar's edges, showing slippage directly.
+   top/height use !important because vis-timeline sets a grouped background
+   item's box to the full row height inline on every redraw (see
+   BackgroundItem's positioning in vis-timeline's source) — there's no public
+   option to shrink it, only CSS can override the inline style. Percentages
+   (not a fixed px height) so this still centers correctly however tall the
+   row ends up (e.g. a row with stacked source-B items is taller). */
+.timeline-host .vis-item.vis-background.ts-actual-overlay {
+  top: 15% !important;
+  height: 70% !important;
+  background-color: rgba(245, 158, 11, 0.18);
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
 /* Parent header rows (groups with nestedGroups). `ts-parent-group` is set on
    BOTH the label and the foreground body so their heights + background match
    (vis only applies its own `.vis-nesting-group` to the label side). The

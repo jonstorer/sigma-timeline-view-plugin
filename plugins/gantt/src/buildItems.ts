@@ -200,6 +200,36 @@ export function resolveProjection(
   }
 }
 
+/**
+ * Resolve the "actual dates" overlay span for a row — Actual Start Date →
+ * Projected Actual End Date, entirely independent of the planned span and
+ * `resolveProjection` above (see that function's doc comment: this is a
+ * second, optional pair of columns, not a replacement). Rendered as a
+ * translucent band behind the planned bar (see LiveTimeline/App.css's
+ * `ts-actual-overlay`), so unlike resolveProjection there's no "ahead"/
+ * "behind" branching — it's just a span, and both columns must resolve for
+ * it to render at all (half the data isn't enough to place a span).
+ */
+export function resolveActualOverlay(
+  rawActualStart: unknown,
+  rawProjectedActualEnd: unknown,
+): { start: Date; end: Date } | null {
+  const start = parseCellDate(rawActualStart)
+  const projectedDay = parseCellDate(rawProjectedActualEnd)
+  if (!start || !projectedDay) return null
+  const end = addDays(projectedDay, 1)
+  if (end.getTime() <= start.getTime()) return null
+  return { start, end }
+}
+
+const ACTUAL_OVERLAY_SUFFIX = '::actual'
+
+/** Identify a synthetic actual-dates overlay item pushed alongside its main
+ * item by `resolveActualOverlay` — see that function's doc comment. */
+export function isActualOverlayItemId(id: unknown): boolean {
+  return typeof id === 'string' && id.endsWith(ACTUAL_OVERLAY_SUFFIX)
+}
+
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
   if (parsed.length === 0) return []
   if (parsed.some((p) => p.values.length === 0)) return []
@@ -274,6 +304,8 @@ export function buildItemsAndGroups(
   const pillColorCol = config.pillColorColumn
   const linkCol = config.linkColumn
   const descCol = config.descriptionColumn
+  const actualStartCol = config.actualStartColumn
+  const projectedActualEndCol = config.projectedActualEndColumn
 
   const groupCols = normalizeGroupCols(config.group)
   if (!startCol || !endCol) return empty()
@@ -291,6 +323,10 @@ export function buildItemsAndGroups(
   const pillColors = pillColorCol ? (data[pillColorCol] ?? []) : []
   const links = linkCol ? (data[linkCol] ?? []) : []
   const descriptions = descCol ? (data[descCol] ?? []) : []
+  const actualStarts = actualStartCol ? (data[actualStartCol] ?? []) : []
+  const projectedActualEnds = projectedActualEndCol
+    ? (data[projectedActualEndCol] ?? [])
+    : []
 
   const rowCount = starts.length
   const items: DataItem[] = []
@@ -352,6 +388,10 @@ export function buildItemsAndGroups(
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''
     const description = descCol ? String(descriptions[i] ?? '').trim() : ''
+    const actualOverlay =
+      actualStartCol && projectedActualEndCol
+        ? resolveActualOverlay(actualStarts[i], projectedActualEnds[i])
+        : null
 
     const pushItem = (itemId: string, group?: string) => {
       if (pill || pillColor || linkUrl || description) {
@@ -373,6 +413,16 @@ export function buildItemsAndGroups(
         ...(style ? { style } : {}),
         ...(className ? { className } : {}),
       })
+      if (actualOverlay) {
+        items.push({
+          id: `${itemId}${ACTUAL_OVERLAY_SUFFIX}`,
+          ...(group ? { group } : {}),
+          type: 'background',
+          start: actualOverlay.start,
+          end: actualOverlay.end,
+          className: 'ts-actual-overlay',
+        })
+      }
       // The caller substitutes this for the item's real end/style while the
       // projection toggle is on — see `resolveProjection`'s doc comment for
       // why widening the item itself (not a sibling) is what makes

@@ -43,6 +43,8 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     allowMultiple: true,
   },
 
+  { name: 'plannedDatesGroup', type: 'group', label: 'Planned dates' },
+
   {
     name: 'startDate',
     type: 'column',
@@ -69,6 +71,31 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     allowedTypes: ['datetime'],
     allowMultiple: false,
   },
+
+  // Optional — surfaces when a child ticket actually started/is projected to
+  // finish, independent of the planned dates above. Both columns must be set
+  // for the overlay to render; see buildItems.ts's resolveActualOverlay.
+  { name: 'actualDatesGroup', type: 'group', label: 'Actual dates (optional)' },
+
+  {
+    name: 'actualStartColumn',
+    type: 'column',
+    label: 'Actual start date',
+    source: SOURCE,
+    allowedTypes: ['datetime'],
+    allowMultiple: false,
+  },
+
+  {
+    name: 'projectedActualEndColumn',
+    type: 'column',
+    label: 'Projected actual end date',
+    source: SOURCE,
+    allowedTypes: ['datetime'],
+    allowMultiple: false,
+  },
+
+  { name: 'otherFieldsGroup', type: 'group', label: 'Other fields' },
 
   {
     name: 'highlightColorColumn',

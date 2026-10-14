@@ -9,7 +9,12 @@ import {
   type TimelineOptions,
 } from 'vis-timeline/esnext'
 import moment from 'moment'
-import { applyLaneMove, buildItemsAndGroups, parseGroupId } from './buildItems'
+import {
+  applyLaneMove,
+  buildItemsAndGroups,
+  isActualOverlayItemId,
+  parseGroupId,
+} from './buildItems'
 import { isSourceBItemId, mergeSecondarySource } from './secondarySource'
 import { pruneEmptyGroups } from './visibility'
 import { renderItemContent } from './templates'
@@ -157,6 +162,10 @@ export function LiveTimeline({
   // disappears (see visibleGroups/pruneEmptyGroups).
   const [hideSourceA, setHideSourceA] = useState(false)
   const [hideSourceB, setHideSourceB] = useState(true)
+  // Independent of showProjection — a separate, optional overlay sourced
+  // from its own pair of columns (see resolveActualOverlay). Off by default,
+  // same reasoning as hideSourceB: don't crowd the primary view uninvited.
+  const [showActualDates, setShowActualDates] = useState(false)
   // Display settings (the three show/hide checkboxes) live behind a gear
   // button rather than always-visible header checkboxes.
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -211,10 +220,13 @@ export function LiveTimeline({
   // empty swimlane.
   const visibleItems = useMemo(
     () =>
-      items.filter((item) =>
-        isSourceBItemId(item.id) ? !hideSourceB : !hideSourceA,
-      ),
-    [items, hideSourceA, hideSourceB],
+      items.filter((item) => {
+        // The overlay is Source-A-only (see buildItems.ts) and gated by its
+        // own toggle on top of Source A's — hidden whenever either is off.
+        if (isActualOverlayItemId(item.id)) return showActualDates && !hideSourceA
+        return isSourceBItemId(item.id) ? !hideSourceB : !hideSourceA
+      }),
+    [items, hideSourceA, hideSourceB, showActualDates],
   )
   const visibleGroups = useMemo(
     () => pruneEmptyGroups(groups, visibleItems),
@@ -700,6 +712,16 @@ export function LiveTimeline({
                         onChange={(e) => setShowProjection(e.target.checked)}
                       />
                       Show projected completion
+                    </label>
+                  )}
+                  {config?.actualStartColumn && config?.projectedActualEndColumn && (
+                    <label className="timeline-settings-item">
+                      <input
+                        type="checkbox"
+                        checked={showActualDates}
+                        onChange={(e) => setShowActualDates(e.target.checked)}
+                      />
+                      Show actual dates
                     </label>
                   )}
                 </div>

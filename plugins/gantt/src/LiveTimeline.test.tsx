@@ -275,6 +275,91 @@ describe('LiveTimeline projection toggle', () => {
   })
 })
 
+describe('LiveTimeline actual-dates toggle', () => {
+  const actualDatesConfig = {
+    ...oneRowConfig,
+    actualStartColumn: 'actual_start_col',
+    projectedActualEndColumn: 'projected_actual_end_col',
+  }
+  const actualDatesData = {
+    ...oneRowData,
+    actual_start_col: ['2026-05-02'],
+    projected_actual_end_col: ['2026-05-11'],
+  }
+
+  test('hides the checkbox unless both actual-dates columns are configured', () => {
+    const { getByLabelText, queryByLabelText } = render(
+      <LiveTimeline config={oneRowConfig} data={oneRowData} />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(queryByLabelText(/show actual dates/i)).not.toBeInTheDocument()
+  })
+
+  test('hides the checkbox when only one actual-dates column is configured', () => {
+    const { getByLabelText, queryByLabelText } = render(
+      <LiveTimeline
+        config={{ ...oneRowConfig, actualStartColumn: 'actual_start_col' }}
+        data={actualDatesData}
+      />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(queryByLabelText(/show actual dates/i)).not.toBeInTheDocument()
+  })
+
+  test('shows the checkbox, unchecked by default, when both columns are configured', () => {
+    const { getByLabelText } = render(
+      <LiveTimeline config={actualDatesConfig} data={actualDatesData} />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    expect(getByLabelText(/show actual dates/i)).not.toBeChecked()
+  })
+
+  test('toggling adds/removes the overlay item from the DataSet, independent of the projection toggle', () => {
+    const { getByLabelText } = render(
+      <LiveTimeline
+        config={{ ...actualDatesConfig, projectedEndColumn: 'projected_col' }}
+        data={{ ...actualDatesData, projected_col: ['2026-05-05'] }}
+      />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    const actualCheckbox = getByLabelText(/show actual dates/i)
+    const projectionCheckbox = getByLabelText(/show projected completion/i)
+    expect(projectionCheckbox).not.toBeChecked()
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    fireEvent.click(actualCheckbox)
+    expect(actualCheckbox).toBeChecked()
+    expect(projectionCheckbox).not.toBeChecked()
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'r1::actual' })]),
+    )
+    addSpy.mockRestore()
+
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    fireEvent.click(actualCheckbox)
+    expect(actualCheckbox).not.toBeChecked()
+    expect(removeSpy).toHaveBeenCalledWith(
+      expect.arrayContaining(['r1::actual']),
+    )
+    removeSpy.mockRestore()
+  })
+
+  test('hiding Source A also hides the overlay even when the toggle is on', () => {
+    const { getByLabelText } = render(
+      <LiveTimeline config={actualDatesConfig} data={actualDatesData} />,
+    )
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show actual dates/i))
+
+    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    fireEvent.click(getByLabelText(/show source a/i))
+    expect(addSpy).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'r1::actual' })]),
+    )
+    addSpy.mockRestore()
+  })
+})
+
 describe('LiveTimeline source visibility toggles', () => {
   const twoSourceConfig = {
     ...oneRowConfig,
