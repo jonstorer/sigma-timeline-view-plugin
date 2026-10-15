@@ -259,6 +259,19 @@ export function LiveTimeline({
     showProjectionRef.current = showProjection
   }, [showProjection])
 
+  // Close the settings dropdown on an outside click. Only listens while
+  // open, so this costs nothing the rest of the time.
+  useEffect(() => {
+    if (!settingsOpen) return
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [settingsOpen])
+
   useEffect(() => {
     showActualDatesRef.current = showActualDates
   }, [showActualDates])

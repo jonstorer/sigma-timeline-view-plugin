@@ -52,11 +52,16 @@ and exposes its config slots in Sigma's editor panel.
 
 ## Editor-panel config
 
-Source A's date-related fields are grouped into labeled sub-sections in the
-editor panel (Planned dates / Actual dates / Other fields) purely to keep a
-growing field list navigable — the grouping is cosmetic (Sigma's `group`
-config type is just a heading, no data of its own) and has no effect on the
-sections documented below.
+Sigma's `group` config type can only contain `text` fields — there's no way
+to visually section off `column`/`variable`/`action-trigger` fields in the
+editor panel at all (an earlier attempt at "Planned dates"/"Actual
+dates"/"Other fields" headings rendered as permanently empty sections in a
+live workbook, since none of the fields meant to sit under them could
+actually be nested there). Source A's fields are ordered and labeled instead
+(e.g. "Actual start date (optional)") to keep a growing field list
+navigable; `sourceAName`/`sourceBName` are the one pair that's a real,
+visible group ("Show/hide menu labels"), since both are genuinely `text`
+fields.
 
 ### Data (required)
 
@@ -195,24 +200,28 @@ formula a workbook-level decision you can change without a plugin deploy.
 
 A checkbox in the header's display settings menu ("Show projected
 completion") only appears once this slot is configured, and toggles the
-overlay on/off. It's a plain UI toggle — it doesn't persist across reloads
-and isn't wired to a Sigma variable.
+overlay on/off. Checked by default once the column is configured — it's an
+opt-out, not an opt-in. It's a plain UI toggle — it doesn't persist across
+reloads and isn't wired to a Sigma variable.
 
-**Visual.** Compares the projected date against the item's own stored end:
+**Visual.** A small strip directly above the planned bar (not inline with
+it — see [Actual dates](#actual-dates-optional) for why), comparing the
+projected date against the item's own stored end:
 
-- **Projected later** (behind schedule): the bar itself is widened out to the
-  projected date, with the real portion solid and the overrun shown as a
-  dashed red fill. Widening the actual bar — rather than drawing a separate
-  overlay next to it — is what makes vis-timeline's own lane-stacking treat
-  the overrun as real estate: a later item in that lane gets bumped onto its
-  own row instead of the overrun visually running through it, and the bar
-  stays visually contiguous with itself (nothing to misalign). This means
-  turning the checkbox on can grow lane heights. The right-edge drag handle
-  sits at the projected date while this is showing, but editing still writes
-  the item's real end — the plugin compensates automatically.
-- **Projected earlier** (ahead of schedule): a thin green marker line inside
-  the bar, at the projected date. The bar's own width is unchanged, so it
-  never affects lane height.
+- **Projected later** (behind schedule): a red hatched strip from the bar's
+  real end to the projected end. The bar itself is still widened out to the
+  projected date under the hood — that's what makes vis-timeline's own
+  lane-stacking treat the overrun as real estate, bumping a colliding
+  sibling onto its own row instead of the overrun visually running through
+  it — but a row's rendered height no longer depends on this: the strip's
+  space is always reserved once the column is configured, so toggling the
+  checkbox only shows/hides the strip's content, not the row's height. The
+  right-edge drag handle sits at the projected date while this is showing,
+  but editing still writes the item's real end — the plugin compensates
+  automatically.
+- **Projected earlier** (ahead of schedule): a hollow, dashed green strip
+  from the projected end back to the bar's real end — the portion of the
+  plan that won't be needed. The bar's own width is unchanged.
 - **Projected on the same day**: no overlay — on track.
 
 **Example formula** (pace extrapolation — "at the rate you've been going,
@@ -247,19 +256,27 @@ on the other.
 Both columns must be configured (and both must resolve to a value on a given
 row) for anything to render — half the pair isn't enough to place a span.
 
-**Visual.** A translucent, dashed-border band spans Actual Start → Projected
-Actual End, rendered *behind* the solid planned bar and scoped to the same
-row. The planned bar itself never changes size or position — wherever the
-band's edges fall outside the planned bar's own edges, it visibly "pokes
-out," showing slippage (or an earlier-than-planned actual start) as an
-overhang rather than a number you have to go read elsewhere.
+**Visual.** A "sandwich" layout around the planned bar rather than one
+composed line, so the planned-side projection and the actual-dates span can
+each render without crowding the other: a small strip above the planned bar
+for the planned-side projection (a red hatch from the real end to the
+projected end when behind schedule, or a hollow dashed green strip from the
+projected end back to the real end — "time saved" — when ahead), the planned
+bar itself unchanged at its own real width, and a small strip below it for
+the actual-dates span (solid amber from Actual Start up to "now," hatched
+for the remainder up to Projected Actual End — there's no separate "actual
+progress" column, so elapsed-so-far stands in). A row's rendered height is
+the same whether these strips have anything to show or not, once a row has
+the data for them — toggling either checkbox below only shows or hides a
+strip's content, it doesn't change row height or reflow neighboring rows.
 
 A checkbox in the header's display settings menu ("Show actual dates") only
 appears once both slots are configured, same conditional-appearance pattern
-as the projected-completion checkbox. It's a plain UI toggle, off by default
-so it doesn't appear uninvited — it doesn't persist across reloads and isn't
-wired to a Sigma variable. Hiding Source A also hides the overlay even while
-the checkbox is checked, since the overlay is Source-A-only.
+as the projected-completion checkbox. Checked by default once the columns
+are configured — it's an opt-out, not an opt-in. It's a plain UI toggle, it
+doesn't persist across reloads and isn't wired to a Sigma variable. Hiding
+Source A also hides the overlay even while the checkbox is checked, since
+the overlay is Source-A-only.
 
 ### Second source (optional)
 
@@ -325,14 +342,17 @@ such conflict to avoid.
 
 ### Display settings menu
 
-A gear button in the header opens a dropdown with up to four checkboxes:
-**Show Source A**, **Show Source B** (only once `sourceB` is configured),
-**Show projected completion** (only once `projectedEndColumn` is
-configured), and **Show actual dates** (only once both `actualStartColumn`
-and `projectedActualEndColumn` are configured) — same conditional-appearance
-rule for each, all consolidated into one menu instead of always-visible
-header checkboxes. The menu stays open while you check things inside it; it
-only closes on an outside click.
+A gear button in the header opens a dropdown with up to four checkboxes,
+grouped by what they actually affect: **Show Source A**, **Show projected
+completion** (only once `projectedEndColumn` is configured), and **Show
+actual dates** (only once both `actualStartColumn` and
+`projectedActualEndColumn` are configured) all affect the roadmap, so they're
+listed together; **Show Source B** (only once `sourceB` is configured) sits
+below a divider since it's an unrelated read-only on-call schedule overlay,
+not another roadmap signal. The projection and actual-dates checkboxes
+default to **checked** once their columns are configured — they're an
+opt-out, not an opt-in. The menu stays open while you check things inside
+it; it only closes on an outside click.
 
 | Slot | Type | Purpose |
 |---|---|---|
