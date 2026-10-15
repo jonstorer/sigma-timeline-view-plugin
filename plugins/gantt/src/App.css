@@ -415,7 +415,7 @@
    inner edges (where planned meets the overhang, or where the progress fill
    splits) are sharp/square — only the box's own true corners, at the far
    ends, stay rounded. */
-.timeline-host .vis-item.vis-range.has-actual-overlay {
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay {
   background-color: transparent;
   box-shadow: none;
   background-image:
@@ -446,8 +446,21 @@
 /* Progress fill: same two layers, but the white layer's left portion (up to
    --progress-point, an ABSOLUTE percentage of this possibly-widened box —
    see resolveActualOverlayWidening's doc comment for why it can't reuse the
-   plain --progress percentage as-is) is tinted instead of white. */
-.timeline-host .vis-item.vis-range.has-actual-overlay.has-progress {
+   plain --progress percentage as-is) is tinted instead of white.
+
+   Both of these has-actual-overlay rules are gated behind .show-actual-dates
+   (like .show-projection gates the projection marker below) even though
+   `has-actual-overlay` itself is baked onto the item unconditionally
+   whenever a row has actual-dates data — buildItems.ts doesn't know the
+   toggle state. Without this gate, --planned-left/--planned-right/
+   --progress-point (only ever set by resolveActualOverlayWidening, which
+   only runs into the rendered style while the toggle is on) fall back to
+   their 0% defaults, which collapses the progress-tint segment to zero
+   width — the plain .has-progress rule above never gets a chance to apply
+   because this selector has higher specificity and still matches on
+   `has-actual-overlay` alone. Confirmed live: every row with actual-dates
+   columns configured lost its progress fill whenever both toggles were off. */
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay.has-progress {
   background-image:
     linear-gradient(
       to right,
