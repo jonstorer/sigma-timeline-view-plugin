@@ -157,6 +157,10 @@ export function LiveTimeline({
   // disappears (see visibleGroups/pruneEmptyGroups).
   const [hideSourceA, setHideSourceA] = useState(false)
   const [hideSourceB, setHideSourceB] = useState(true)
+  // Display settings (the three show/hide checkboxes) live behind a gear
+  // button rather than always-visible header checkboxes.
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement | null>(null)
   // Item id -> real (unwidened) display end, kept alongside
   // widenedByItemIdRef so onMove can recover how much a behind-schedule
   // item's end was widened by, to compensate a drag on it (see onMove).
@@ -228,6 +232,19 @@ export function LiveTimeline({
   useEffect(() => {
     showProjectionRef.current = showProjection
   }, [showProjection])
+
+  // Close the settings dropdown on an outside click. Only listens while
+  // open, so this costs nothing the rest of the time.
+  useEffect(() => {
+    if (!settingsOpen) return
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [settingsOpen])
 
   useEffect(() => {
     widenedByItemIdRef.current = widenedByItemId
@@ -616,6 +633,16 @@ export function LiveTimeline({
   const zoomIn = () => timelineRef.current?.zoomIn(0.3)
   const zoomOut = () => timelineRef.current?.zoomOut(0.3)
 
+  // Cosmetic only — falls back to "Source A"/"Source B" (never blank, never
+  // the raw config field name) when no override is configured.
+  const sourceALabel = config?.sourceAName?.trim() || 'Source A'
+  const sourceBLabel = config?.sourceBName?.trim() || 'Source B'
+  // The "Show Source A" entry is always present once there's a source at
+  // all (projectedEndColumn/sourceB can only be configured once SOURCE is
+  // already picked), so this is the whole gate for whether there's
+  // anything in the menu to show.
+  const hasSettings = hasSource
+
   return (
     <div className="timeline-root">
       <header className="timeline-header">
@@ -632,35 +659,52 @@ export function LiveTimeline({
           </p>
         </div>
         <div className="timeline-toolbar">
-          {hasSource && (
-            <label className="timeline-projection-toggle">
-              <input
-                type="checkbox"
-                checked={!hideSourceA}
-                onChange={(e) => setHideSourceA(!e.target.checked)}
-              />
-              Show primary source
-            </label>
-          )}
-          {config?.sourceB && (
-            <label className="timeline-projection-toggle">
-              <input
-                type="checkbox"
-                checked={!hideSourceB}
-                onChange={(e) => setHideSourceB(!e.target.checked)}
-              />
-              Show second source
-            </label>
-          )}
-          {config?.projectedEndColumn && (
-            <label className="timeline-projection-toggle">
-              <input
-                type="checkbox"
-                checked={showProjection}
-                onChange={(e) => setShowProjection(e.target.checked)}
-              />
-              Show projected completion
-            </label>
+          {hasSettings && (
+            <div className="timeline-settings" ref={settingsRef}>
+              <button
+                type="button"
+                className="timeline-settings-btn"
+                onClick={() => setSettingsOpen((open) => !open)}
+                aria-label="Display settings"
+                aria-expanded={settingsOpen}
+                aria-haspopup="true"
+                title="Display settings"
+              >
+                ⚙
+              </button>
+              {settingsOpen && (
+                <div className="timeline-settings-menu" role="menu">
+                  <label className="timeline-settings-item">
+                    <input
+                      type="checkbox"
+                      checked={!hideSourceA}
+                      onChange={(e) => setHideSourceA(!e.target.checked)}
+                    />
+                    Show {sourceALabel}
+                  </label>
+                  {config?.sourceB && (
+                    <label className="timeline-settings-item">
+                      <input
+                        type="checkbox"
+                        checked={!hideSourceB}
+                        onChange={(e) => setHideSourceB(!e.target.checked)}
+                      />
+                      Show {sourceBLabel}
+                    </label>
+                  )}
+                  {config?.projectedEndColumn && (
+                    <label className="timeline-settings-item">
+                      <input
+                        type="checkbox"
+                        checked={showProjection}
+                        onChange={(e) => setShowProjection(e.target.checked)}
+                      />
+                      Show projected completion
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           <button
             type="button"

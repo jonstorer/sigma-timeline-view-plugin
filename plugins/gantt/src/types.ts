@@ -9,6 +9,9 @@ import type { DataGroup, DataItem } from 'vis-timeline/esnext'
  */
 export interface TimelineConfig {
   source?: string
+  /** Optional display name for source A, used only in the plugin's own
+   * show/hide menu — never shown in Sigma's editor panel itself. */
+  sourceAName?: string
   idColumn?: string
   label?: string
   group?: string | string[]
@@ -26,6 +29,9 @@ export interface TimelineConfig {
   recordIdVariable?: string
   selectAction?: string
   sourceB?: string
+  /** Optional display name for source B, used only in the plugin's own
+   * show/hide menu — never shown in Sigma's editor panel itself. */
+  sourceBName?: string
   labelB?: string
   groupB?: string | string[]
   startDateB?: string

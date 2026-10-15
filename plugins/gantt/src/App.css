@@ -43,15 +43,70 @@
   flex: 0 0 auto;
 }
 
-.timeline-projection-toggle {
+/* Gear button + dropdown — the three show/hide checkboxes (sources A/B,
+   projected completion) live here instead of as always-visible header
+   checkboxes. */
+.timeline-settings {
+  position: relative;
+  margin-right: 6px;
+}
+
+.timeline-settings-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-right: 10px;
+  justify-content: center;
+  padding: 0;
+}
+
+.timeline-settings-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.timeline-settings-btn[aria-expanded='true'] {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.timeline-settings-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.timeline-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: #374151;
   cursor: pointer;
   user-select: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.timeline-settings-item:hover {
+  background: #f3f4f6;
 }
 
 .timeline-zoom-btn {
