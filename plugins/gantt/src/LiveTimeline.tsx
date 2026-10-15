@@ -182,6 +182,9 @@ export function LiveTimeline({
   const baseEndByItemIdRef = useRef<Map<string, Date>>(new Map())
   const widenedByItemIdRef = useRef<Map<string, WidenedProjection>>(new Map())
   const widenedByActualIdRef = useRef<Map<string, WidenedActualOverlay>>(new Map())
+  const widenedByActualAndProjectionIdRef = useRef<Map<string, WidenedActualOverlay>>(
+    new Map(),
+  )
   // Whether groupsDs is currently the Timeline's active groups source. Lets
   // the sync effect below skip re-calling setGroups() when nothing about
   // grouped-vs-ungrouped changed — see that effect for why it matters.
@@ -204,6 +207,7 @@ export function LiveTimeline({
   const {
     widenedByItemId,
     widenedByActualId,
+    widenedByActualAndProjectionId,
     rowIdByItemId,
     groupColumns,
     originalPathByItemId,
@@ -271,6 +275,7 @@ export function LiveTimeline({
   useEffect(() => {
     widenedByItemIdRef.current = widenedByItemId
     widenedByActualIdRef.current = widenedByActualId
+    widenedByActualAndProjectionIdRef.current = widenedByActualAndProjectionId
     baseEndByItemIdRef.current = new Map(
       items
         .filter((item) => item.end != null)
@@ -279,7 +284,7 @@ export function LiveTimeline({
     baseStartByItemIdRef.current = new Map(
       items.map((item) => [String(item.id), item.start as Date]),
     )
-  }, [items, widenedByItemId, widenedByActualId])
+  }, [items, widenedByItemId, widenedByActualId, widenedByActualAndProjectionId])
 
   useEffect(() => {
     configRef.current = config
@@ -408,14 +413,18 @@ export function LiveTimeline({
         // the WIDENED edge(s), not the real one(s). Compensate by the same
         // amount the item was widened by, so the real edge shifts by exactly
         // what the user dragged — write-back always targets the true stored
-        // dates, never the widened ones. The actual-dates overlay takes
-        // priority over projection for an item governed by both (see
-        // buildItems.ts/App.css) — projection only ever widens the end,
-        // while actual-dates can widen either edge.
+        // dates, never the widened ones. An item with an actual-overlay uses
+        // whichever of the two actual-overlay widen maps matches the live
+        // projection toggle (see the sync effect below for why there are
+        // two) — projection only ever widens the end, while actual-dates can
+        // widen either edge.
         let realStart = span?.start ?? null
         let realEnd = span?.end ?? null
-        if (span && showActualDatesRef.current && widenedByActualIdRef.current.has(itemId)) {
-          const widened = widenedByActualIdRef.current.get(itemId)!
+        const actualWidenMap = showProjectionRef.current
+          ? widenedByActualAndProjectionIdRef.current
+          : widenedByActualIdRef.current
+        if (span && showActualDatesRef.current && actualWidenMap.has(itemId)) {
+          const widened = actualWidenMap.get(itemId)!
           const baseStart = baseStartByItemIdRef.current.get(itemId)
           const baseEnd = baseEndByItemIdRef.current.get(itemId)
           if (baseStart && baseEnd) {
@@ -641,21 +650,26 @@ export function LiveTimeline({
         groupsAttachedRef.current = hasGroups
       }
 
-      // A widened item's start/end (and, for projection, its style) is
-      // substituted only while the relevant toggle is on — see
-      // resolveProjection's and resolveActualOverlayWidening's doc comments.
-      // This is a genuine DataSet change (not pure CSS): it's what makes
-      // vis-timeline's own stacking treat the overrun as this item's real
-      // footprint, so it correctly bumps a colliding sibling out of the way.
-      // Actual-dates takes priority over projection for an item governed by
-      // both (see App.css's has-actual-overlay rules) — composing both
-      // overlays' independently-computed ratios in one box is out of scope.
+      // A widened item's start/end (and style) is substituted only while the
+      // relevant toggle is on — see resolveProjection's and
+      // resolveActualOverlayWidening's doc comments. This is a genuine
+      // DataSet change (not pure CSS): it's what makes vis-timeline's own
+      // stacking treat the overrun as this item's real footprint, so it
+      // correctly bumps a colliding sibling out of the way. An item with an
+      // actual-overlay uses widenedByActualAndProjectionId (composing both
+      // signals into one box) when projection is ALSO on, so both render on
+      // the same bar at once; otherwise widenedByActualId (actual-overlay
+      // alone). An item with no actual-overlay is untouched by either map
+      // and falls through to the plain projection-only path, unchanged.
       const itemsToSync =
         showProjection || showActualDates
           ? visibleItems.map((item) => {
               const id = String(item.id)
               if (showActualDates) {
-                const actualWidened = widenedByActualId.get(id)
+                const actualMap = showProjection
+                  ? widenedByActualAndProjectionId
+                  : widenedByActualId
+                const actualWidened = actualMap.get(id)
                 if (actualWidened) {
                   return {
                     ...item,
@@ -682,6 +696,7 @@ export function LiveTimeline({
     visibleItems,
     widenedByItemId,
     widenedByActualId,
+    widenedByActualAndProjectionId,
     visibleGroups,
     groups,
     syncWeekends,

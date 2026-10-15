@@ -151,22 +151,12 @@ describe('renderItemContent', () => {
     expect(out).toBeInstanceOf(HTMLElement)
   })
 
-  test('has-actual-overlay: wraps plain text content in .ts-planned-inset', () => {
-    const visuals = new Map<string, ItemVisual>()
-    const item = {
-      id: 'x',
-      content: 'Task',
-      start: new Date(),
-      className: 'has-actual-overlay',
-    } as TimelineItem
-    const out = renderItemContent(item, visuals)
-    expect(out).toBeInstanceOf(HTMLElement)
-    const inset = out as HTMLElement
-    expect(inset.className).toBe('ts-planned-inset')
-    expect(inset.textContent).toBe('Task')
-  })
-
-  test('has-actual-overlay: wraps the normal pill/link wrapper, not around it', () => {
+  test('has-actual-overlay class on the item has no effect on rendered content', () => {
+    // The actual-dates overlay is painted entirely via CSS background-image
+    // layers on the outer box (see App.css) — see buildItems.ts's
+    // resolveActualOverlayWidening doc comment for why a DOM content wrapper
+    // doesn't work here (vis-timeline's sticky-label content transform).
+    // renderItemContent doesn't need to know about has-actual-overlay at all.
     const visuals = new Map<string, ItemVisual>([
       ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
     ])
@@ -178,18 +168,9 @@ describe('renderItemContent', () => {
     } as TimelineItem
     const out = renderItemContent(item, visuals)
     expect(out).toBeInstanceOf(HTMLElement)
-    const inset = out as HTMLElement
-    expect(inset.className).toBe('ts-planned-inset')
-    const wrapper = inset.firstElementChild as HTMLElement
+    const wrapper = out as HTMLElement
     expect(wrapper.className).toBe('ts-item-wrapper')
     expect(wrapper.querySelector('.ts-pill')?.textContent).toBe('P0')
     expect(wrapper.querySelector('a.ts-item-link')).not.toBeNull()
-  })
-
-  test('no has-actual-overlay class: no .ts-planned-inset wrapper added', () => {
-    const visuals = new Map<string, ItemVisual>([['x', { pill: 'P0' }]])
-    const out = renderItemContent(makeItem('x', 'Task'), visuals)
-    expect(out).toBeInstanceOf(HTMLElement)
-    expect((out as HTMLElement).className).toBe('ts-item-wrapper')
   })
 })

@@ -87,10 +87,17 @@ export interface WidenedActualOverlay {
    * than the planned start) as part of this item's own footprint. */
   start: Date
   end: Date
-  /** The item's base style with `--planned-left`/`--planned-right` appended
-   * — where the real planned bar sits within this widened box, as a
-   * percentage of the box's own width. Consumed by `.ts-planned-inset` in
-   * App.css (see templates.ts for the wrapper it applies to). */
+  /** The item's base style with `--planned-left`/`--planned-right` (and,
+   * when there's a progress value, `--progress-point`) appended — where the
+   * real planned bar (and its progress fill) sits within this widened box,
+   * as a percentage of the box's own width. Consumed by the
+   * `.has-actual-overlay` `background-image` gradient layers in App.css —
+   * see `resolveActualOverlayWidening`'s doc comment in buildItems.ts for
+   * why this is a CSS gradient on the item itself rather than a DOM wrapper.
+   * When composed with a projection (see `resolveActualOverlayWidening`),
+   * also carries a corrected `--projection-ratio` (and, for a "behind"
+   * projection, `--projection-end-right`) relative to this same widened
+   * box, overriding the stale value baked into the base style. */
   style: string
 }
 
@@ -105,13 +112,17 @@ export interface BuildResult {
    * drag write-back math so editing a widened bar still targets the item's
    * real stored end. */
   widenedByItemId: Map<string, WidenedProjection>
-  /** Item id → what to substitute while the actual-dates toggle is on — see
-   * `WidenedActualOverlay`. Independent of `widenedByItemId`: when both a
-   * projection and an actual-overlay apply to the same item and both
-   * toggles are on, the actual-overlay takes priority for that item (see
-   * LiveTimeline's sync effect) rather than attempting to compose two
-   * independently-computed ratio systems in one box. */
+  /** Item id → what to substitute while the actual-dates toggle is on AND the
+   * projection toggle is off — see `WidenedActualOverlay`. Plain actual-
+   * overlay widening only, no projection composed in. */
   widenedByActualId: Map<string, WidenedActualOverlay>
+  /** Item id → what to substitute while *both* the actual-dates and
+   * projection toggles are on — the same actual-overlay widening, but with
+   * the projection (if one resolves for this row) composed into the same
+   * union box and its ratio recomputed against it, so both signals render
+   * correctly on one bar at once. Equal to `widenedByActualId`'s entry for a
+   * row with no projection. */
+  widenedByActualAndProjectionId: Map<string, WidenedActualOverlay>
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>

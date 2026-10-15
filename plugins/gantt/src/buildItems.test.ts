@@ -776,6 +776,7 @@ describe('resolveProjection', () => {
       style: '--projection-ratio: 62.5%;',
       displayEnd: new Date(2026, 4, 12),
       realRatio: 0.625,
+      projectedDisplayEnd: new Date(2026, 4, 12),
     })
   })
 
@@ -786,6 +787,7 @@ describe('resolveProjection', () => {
       kind: 'ahead',
       className: 'has-projection-ahead',
       style: '--projection-ratio: 40%;',
+      projectedDisplayEnd: new Date(2026, 4, 6),
     })
   })
 
@@ -967,7 +969,7 @@ describe('resolveActualOverlayWidening', () => {
     // Widened box: Apr 27 -> May 13 (16 days). Planned (May 4 -> May 9) sits
     // 7 days in from the left (43.75%) and 4 days short of the right (25%).
     const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
-    const widened = resolveActualOverlayWidening(span, overlay, undefined)
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined)
     expect(widened.start).toEqual(overlay.start)
     expect(widened.end).toEqual(overlay.end)
     expect(widened.style).toContain('--planned-left: 43.75%;')
@@ -976,7 +978,7 @@ describe('resolveActualOverlayWidening', () => {
 
   test('overlay fully inside the planned span: widened box equals the planned span, insets are 0', () => {
     const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
-    const widened = resolveActualOverlayWidening(span, overlay, undefined)
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined)
     expect(widened.start).toEqual(span.start)
     expect(widened.end).toEqual(span.end)
     expect(widened.style).toBe('--planned-left: 0%; --planned-right: 0%;')
@@ -984,10 +986,77 @@ describe('resolveActualOverlayWidening', () => {
 
   test('appends to an existing base style rather than replacing it', () => {
     const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
-    const widened = resolveActualOverlayWidening(span, overlay, '--item-color: #f00;')
+    const widened = resolveActualOverlayWidening(
+      span,
+      overlay,
+      null,
+      null,
+      '--item-color: #f00;',
+    )
     expect(widened.style).toBe(
       '--item-color: #f00; --planned-left: 0%; --planned-right: 0%;',
     )
+  })
+
+  test('a progress value computes --progress-point as an absolute percentage of the widened box', () => {
+    // Overlay widens left by 7 days and right by 4 days (same as the first
+    // test above): planned sits at 43.75%-75% of the 16-day union box.
+    // 50% progress through the planned portion (31.25 points wide) lands at
+    // 43.75 + 0.5*31.25 = 59.375%.
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, 50, undefined)
+    expect(widened.style).toContain('--progress-point: 59.375%;')
+  })
+
+  test('no progress value: no --progress-point in the style', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined)
+    expect(widened.style).not.toContain('--progress-point')
+  })
+
+  test('composes a behind-schedule projection into the same union box, recomputing its ratio and adding a right-inset for the overrun stripe', () => {
+    // Projected completion: last day Mon May 18 -> display end Tue May 19
+    // (further right than the actual-overlay's own May 13 end).
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const projection = resolveProjection(span, '2026-05-18')
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined)
+    // Union: Apr 27 -> May 19 (22 days). Planned (May 4 -> May 9) sits 7
+    // days in (31.818...%) and 10 days short of the right (45.454...%).
+    expect(widened.start).toEqual(new Date(2026, 3, 27))
+    expect(widened.end).toEqual(new Date(2026, 4, 19))
+    expect(widened.style).toContain('--planned-left: 31.818181818181817%;')
+    expect(widened.style).toContain('--planned-right: 45.45454545454545%;')
+    // --projection-ratio marks the real end (May 9) within the union box;
+    // --projection-end-right insets the stripe back from the union's right
+    // edge (May 19) to the projected end (also May 19 here) -- 0%, since
+    // the projection IS what pushed the union that far right.
+    expect(widened.style).toContain('--projection-ratio: 54.54545454545454%;')
+    expect(widened.style).toContain('--projection-end-right: 0%;')
+  })
+
+  test('composes an ahead-of-schedule projection, recomputing its ratio relative to the union box', () => {
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const projection = resolveProjection(span, '2026-05-05') // ahead: display end May 6
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined)
+    // Union stays Apr 27 -> May 13 (16 days) -- the ahead projection (May 6)
+    // never extends past what the actual-overlay already covers.
+    expect(widened.end).toEqual(new Date(2026, 4, 13))
+    // May 6 is 9 days after the union start (Apr 27), i.e. 9/16 = 56.25%.
+    expect(widened.style).toContain('--projection-ratio: 56.25%;')
+    expect(widened.style).not.toContain('--projection-end-right')
+  })
+
+  test('actual-overlay extends further right than the projected end: the overrun stripe stops short of the union edge', () => {
+    // Projected completion ends well before the actual-overlay's own end.
+    const overlay = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 20) } // ends May 20
+    const projection = resolveProjection(span, '2026-05-11') // behind: display end May 12
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined)
+    // Union: May 4 -> May 20 (16 days). Real end (May 9) is 5 days in = 31.25%.
+    expect(widened.end).toEqual(new Date(2026, 4, 20))
+    expect(widened.style).toContain('--projection-ratio: 31.25%;')
+    // Projected end (May 12) is 8 days short of the union's right edge
+    // (May 20) out of 16 total = 50%.
+    expect(widened.style).toContain('--projection-end-right: 50%;')
   })
 })
 

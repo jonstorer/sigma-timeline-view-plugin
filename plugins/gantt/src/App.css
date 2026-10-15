@@ -386,112 +386,97 @@
    planned, it pokes out past the solid bar's edges, showing slippage
    directly. Independent of the projected-completion overlay above.
 
-   This used to be a separate `type:'background'` DataItem scoped to the
-   row's `group`, but vis-timeline can only scope a background item to a
-   whole group/lane, not to whichever row its own dynamic stacking placed a
-   specific item on — every item sharing a lane rendered its overlay at the
-   same (wrong, jittery-on-scroll) spot. Fixed by widening the item's OWN
-   box to the union of its planned + actual-overlay spans (same trick
-   `resolveProjection`'s "behind" case already uses) and rendering the real
-   "solid card" look on an inner `.ts-planned-inset` wrapper (templates.ts),
-   inset from the wider box's edges via --planned-left/--planned-right. The
-   outer box — now wider than the planned bar whenever they diverge — is what
-   shows the translucent/dashed look; .ts-planned-inset's own background
-   covers it everywhere except the overhang, so the overhang is the only
-   part where the translucent look is actually visible.
+   This went through two earlier designs before landing here, both confirmed
+   broken live against a real vis-timeline instance (jsdom doesn't do real
+   layout, so unit tests couldn't catch either):
+     1. A separate `type:'background'` DataItem scoped to the row's `group`.
+        vis-timeline can only scope a background item to a whole group/lane,
+        not to whichever row its own dynamic stacking placed a specific item
+        on, so every item sharing a lane rendered its overlay at the same
+        (wrong, jittery-on-scroll) spot.
+     2. Widening the item's own box (fixing #1) and rendering the "solid
+        card" look on an inner `.ts-planned-inset` DOM wrapper, inset from
+        the wider box via --planned-left/--planned-right. This looked right
+        until scrolling: vis-timeline applies `transform: translateX(...)`
+        directly to `.vis-item-content` whenever an item's left edge scrolls
+        off-screen, to keep its label visible (confirmed in vis-timeline's
+        own source, the default-align branch of its item positioning code).
+        A CSS transform drags its *entire* subtree along with it, so the
+        wrapper (and its progress fill) visibly slid within the bar during a
+        horizontal scroll — there's no way to exempt a DOM descendant of
+        `.vis-item-content` from that.
 
-   The split exists (an extra wrapper + these two rule sets) whenever a row
-   has both actual-dates columns configured, regardless of whether the
-   toggle is currently on — only the --planned-left/--planned-right values
-   change (defaulting to 0%, i.e. full coverage, when unset), so toggling
-   never changes which element paints the "card" look, only how far
-   .ts-planned-inset insets from the edges. */
+   The box-widening from #2 is still correct and kept (it's what makes
+   vis-timeline's own stacking treat the overrun as this item's real
+   footprint). What changed is that the "solid card" look is now painted
+   directly as `background-image` layers on the outer box itself — NOT
+   inside `.vis-item-content` at all, so it's immune to the sticky-label
+   transform. The trade-off: a gradient can't do partial rounding, so the
+   inner edges (where planned meets the overhang, or where the progress fill
+   splits) are sharp/square — only the box's own true corners, at the far
+   ends, stay rounded. */
 .timeline-host .vis-item.vis-range.has-actual-overlay {
-  background: none;
+  background-color: transparent;
   box-shadow: none;
-  /* Explicit, not just the base rule's min-height: an absolutely positioned
-     descendant resolving `top:0;bottom:0` (see .ts-planned-inset below)
-     needs its containing block to have a *definite* height — min-height
-     alone doesn't count, confirmed live (it silently resolved to 0,
-     collapsing .ts-planned-inset to just its own padding). Every item in
-     this codebase is always exactly this tall regardless (18px line-height
-     + 4px top/bottom padding = 26px, matching min-height exactly, single
-     line only — see .ts-item-text's `white-space: nowrap`), so hardcoding
-     it here changes nothing for a normal item's actual rendered size. */
-  height: 26px;
+  background-image:
+    /* Left accent bar: a 4px solid stripe at the PLANNED bar's own left
+       edge (doing the job box-shadow's `inset 4px 0 0` normally does on a
+       plain item, but box-shadow can't be offset away from the box's own
+       edge the way this needs to be when --planned-left > 0). */
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      var(--item-color, #6b7280) var(--planned-left, 0%),
+      var(--item-color, #6b7280) calc(var(--planned-left, 0%) + 4px),
+      transparent calc(var(--planned-left, 0%) + 4px)
+    ),
+    /* The planned "card": solid white from --planned-left to 100% minus
+       --planned-right; transparent everywhere else, revealing the
+       translucent/dashed band (painted via background-color below) only in
+       the overhang. Defaults (0%/0%, i.e. full coverage) make this look
+       identical to a plain item whenever there's nothing to show yet. */
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #ffffff var(--planned-left, 0%),
+      #ffffff calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    );
 }
-/* vis-timeline's own bundled CSS sets `.vis-item-content { position:
-   relative; display: inline-block }` — but more importantly, vis also sets
-   `transform: translateX(...)` on it INLINE (its own horizontal-scroll
-   positioning, confirmed live — present even when the translate is 0px).
-   ANY transform value, even an identity one, makes an element a containing
-   block for its absolutely-positioned descendants REGARDLESS of its
-   `position` — so .ts-planned-inset is UNAVOIDABLY anchored to
-   .vis-item-content specifically; overriding `position` here (tried first)
-   has no effect on that, confirmed live.
-
-   Given .vis-item-content can't be routed around, it has to be made
-   definite-sized instead. An inline-block normally shrink-wraps to its
-   normal-flow content, but .ts-planned-inset is removed from flow, so with
-   nothing left to shrink-wrap around it collapsed to near its own padding
-   box — hence `display: block; width: 100%`. Height needs the SAME
-   treatment for the same reason, which only resolves because the item box
-   above now has an explicit `height` for this percentage chain to bottom
-   out on (`.vis-item-overflow`'s own unmodified `height: 100%` from vis's
-   CSS resolves against that explicit height; this rule's `height: 100%`
-   resolves against .vis-item-overflow's now-resolved height in turn). */
-.timeline-host .vis-item.vis-range.has-actual-overlay .vis-item-content {
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-}
-.timeline-host .vis-item.vis-range.has-actual-overlay .ts-planned-inset {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--planned-left, 0%);
-  right: var(--planned-right, 0%);
-  background: #ffffff;
-  border-radius: 10px;
-  box-shadow:
-    inset 4px 0 0 var(--item-color, #6b7280),
-    0 2px 6px rgba(15, 23, 42, 0.14);
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 4px 10px 4px 12px;
-  line-height: 18px;
-}
-/* Progress fill moves onto .ts-planned-inset too — its width is always the
-   real (unwidened) item's own width, even when the outer box is widened, so
-   the existing --progress percentage (relative to .ts-planned-inset's own
-   width) stays correct with no rescaling needed, unlike the projection
-   "behind" case which widens the SAME box the fill lives in. */
-.timeline-host .vis-item.vis-range.has-actual-overlay.has-progress .ts-planned-inset {
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff) var(--progress, 0%),
-    #fff var(--progress, 0%)
-  );
+/* Progress fill: same two layers, but the white layer's left portion (up to
+   --progress-point, an ABSOLUTE percentage of this possibly-widened box —
+   see resolveActualOverlayWidening's doc comment for why it can't reuse the
+   plain --progress percentage as-is) is tinted instead of white. */
+.timeline-host .vis-item.vis-range.has-actual-overlay.has-progress {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      var(--item-color, #6b7280) var(--planned-left, 0%),
+      var(--item-color, #6b7280) calc(var(--planned-left, 0%) + 4px),
+      transparent calc(var(--planned-left, 0%) + 4px)
+    ),
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff)
+        var(--planned-left, 0%),
+      color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff)
+        var(--progress-point, var(--planned-left, 0%)),
+      #ffffff var(--progress-point, var(--planned-left, 0%)),
+      #ffffff calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    );
 }
 /* The translucent, dashed "actual" band only appears while the toggle is on
-   — same host-level-class gating pattern as .show-projection below. */
+   — same host-level-class gating pattern as .show-projection below. Shows
+   through wherever the gradient layers above are transparent (i.e. outside
+   the planned region). */
 .timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay {
   background-color: rgba(245, 158, 11, 0.18);
   border: 1px dashed rgba(245, 158, 11, 0.5);
-  border-radius: 10px;
   box-sizing: border-box;
 }
-/* Suppress the projected-completion marker on an item whose box is being
-   governed by the actual-dates overlay instead — composing both overlays'
-   independently-computed ratios in one box is out of scope (rare to have
-   both configured and toggled on for the same row at once); toggling either
-   off restores the other's normal behavior immediately for that item. */
-.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay.has-projection-ahead::after,
-.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay.has-projection-behind::after {
-  display: none !important;
-}
-
 /* Projected-completion overlay — one mechanism for both directions now (see
    resolveProjection's doc comment in buildItems.ts for why): a
    `--projection-ratio` custom property (a percentage of the item's own
@@ -507,7 +492,14 @@
    stacking treats the overrun as this item's real footprint (bumping a
    colliding sibling for free, no custom packing needed) — `--projection-ratio`
    then marks where the real end falls *within* that widened box, and
-   everything past it is shaded as the overrun. */
+   everything past it is shaded as the overrun.
+
+   `--projection-end-right` (default 0%, i.e. the stripe runs to the box's
+   own right edge) only matters for an item that ALSO has an actual-overlay
+   and both toggles are on: there, `resolveActualOverlayWidening` composes
+   both signals into one (possibly wider) box, and the overrun stripe needs
+   to stop at the projected end rather than bleed into the actual-overlay's
+   own territory past it — see that function's doc comment. */
 .timeline-host .vis-item.vis-range.has-projection-ahead::after,
 .timeline-host .vis-item.vis-range.has-projection-behind::after {
   content: '';
@@ -526,7 +518,7 @@
 .timeline-host.show-projection .vis-item.vis-range.has-projection-behind::after {
   display: block;
   left: var(--projection-ratio, 100%);
-  right: 0;
+  right: var(--projection-end-right, 0%);
   background-image: repeating-linear-gradient(
     45deg,
     rgba(220, 38, 38, 0.35) 0 4px,

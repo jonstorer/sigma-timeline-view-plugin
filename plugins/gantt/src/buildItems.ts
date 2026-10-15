@@ -156,7 +156,16 @@ export function resolveProjection(
   span: { start: Date; end: Date },
   rawProjectedEnd: unknown,
 ):
-  | { kind: 'ahead'; className: string; style: string }
+  | {
+      kind: 'ahead'
+      className: string
+      style: string
+      /** The raw projected display date, regardless of kind — exposed so a
+       * caller composing this with another overlay (see
+       * `resolveActualOverlayWidening`) can recompute `--projection-ratio`
+       * relative to a *different*, wider box than the one assumed here. */
+      projectedDisplayEnd: Date
+    }
   | {
       kind: 'behind'
       className: string
@@ -169,6 +178,10 @@ export function resolveProjection(
        * without rescaling would shrink that fill's *absolute* position even
        * though the underlying progress value didn't change. */
       realRatio: number
+      /** Same value as `displayEnd` — present on both branches under one
+       * consistent name so a caller doesn't need to branch on `kind` just to
+       * read it. */
+      projectedDisplayEnd: Date
     }
   | null {
   if (rawProjectedEnd == null) return null
@@ -190,6 +203,7 @@ export function resolveProjection(
       style: `--projection-ratio: ${realRatio * 100}%;`,
       displayEnd: projectedDisplayEnd,
       realRatio,
+      projectedDisplayEnd,
     }
   }
   const durationMs = endMs - startMs // > 0: dayBoundDisplaySpan enforces a 1-day minimum
@@ -198,6 +212,7 @@ export function resolveProjection(
     kind: 'ahead',
     className: 'has-projection-ahead',
     style: `--projection-ratio: ${ratio}%;`,
+    projectedDisplayEnd,
   }
 }
 
@@ -236,29 +251,91 @@ export function resolveActualOverlay(
 }
 
 /**
- * Widen an item's own box to the union of its planned span and its actual-
- * overlay span, plus a style carrying where the real planned bar sits within
- * that widened box (`--planned-left`/`--planned-right`, percentages of the
- * widened box's own width). `.ts-planned-inset` (App.css) uses these to
- * render the real "solid card" look inset within the wider, translucent
- * outer box — see `templates.ts`'s `renderItemContent` for the wrapper this
- * pairs with.
+ * Widen an item's own box to the union of its planned span, its actual-
+ * overlay span, and — when `projection` is passed — its projected-completion
+ * end too, so all three signals can render on the same bar at once rather
+ * than one suppressing another. Also computes a style carrying where the
+ * real planned bar sits within that widened box (`--planned-left`/
+ * `--planned-right`, percentages of the widened box's own width), consumed
+ * by App.css's `.has-actual-overlay` `background-image` gradient layers (the
+ * "solid card" look, inset within the wider, translucent outer box).
  *
- * Unlike `resolveProjection`, this can widen *either* edge (an actual start
- * earlier than planned is exactly the "ahead" case this feature exists to
- * surface), so the inset has two independent insets rather than one ratio.
+ * This used to be a DOM wrapper (`.ts-planned-inset`) instead of a CSS
+ * gradient. Confirmed live and in vis-timeline's own source
+ * (`dom.content.style.transform = ...` in its default item-align branch):
+ * whenever an item's left edge scrolls past the visible window, vis-timeline
+ * applies a `transform: translateX(...)` to `.vis-item-content` to keep the
+ * label visible (its "sticky label" feature) — a CSS transform drags its
+ * *entire* subtree along with it, so a DOM wrapper nested in there (the
+ * white card, including its progress fill) visibly slid within the bar
+ * during a horizontal scroll, independent of its own CSS. A plain
+ * `background-image` on the outer box itself isn't inside `.vis-item-content`
+ * at all, so it's immune — at the cost of losing the rounded corners on the
+ * inner edges (a gradient can't do partial rounding; only the box's own true
+ * corners, at the far ends, stay rounded).
+ *
+ * Unlike `resolveProjection` alone, this can widen *either* edge (an actual
+ * start earlier than planned is exactly the "ahead" case this feature exists
+ * to surface), so the inset has two independent insets rather than one ratio.
+ *
+ * When `projection` is passed, `resolveProjection`'s own `--projection-ratio`
+ * (computed relative to the *unwidened* planned box) is stale once this box
+ * is wider — recomputed here relative to the actual union box instead, and
+ * appended after `baseStyle` so the corrected value wins (CSS custom
+ * properties declared twice in one inline style resolve to the last one).
+ * The "behind" case also needs `--projection-end-right`: the existing CSS
+ * rule assumes the box's own right edge *is* the projected end (`right: 0`),
+ * which only holds when nothing widens further right than that — pass a
+ * right-inset percentage so the red overrun stripe stops at the projected
+ * end even when the actual-overlay's own end extends past it. This part is
+ * unaffected by the sticky-label bug above — the projection marker is a
+ * `::after` pseudo-element on `.vis-item` itself, not inside
+ * `.vis-item-content`, so it was never subject to it.
+ *
+ * `progressPct` (0–100, or null) computes `--progress-point`: where the
+ * progress-tinted portion ends, as an absolute percentage of the *widened*
+ * box — the existing `--progress` percentage is relative to the item's own
+ * (real, unwidened) width, which no longer matches this box's width once
+ * widened, so it has to be rebased here rather than reused as-is.
  */
 export function resolveActualOverlayWidening(
   span: { start: Date; end: Date },
   overlay: { start: Date; end: Date },
+  projection: ReturnType<typeof resolveProjection>,
+  progressPct: number | null,
   baseStyle: string | undefined,
 ): WidenedActualOverlay {
-  const start = overlay.start.getTime() < span.start.getTime() ? overlay.start : span.start
-  const end = overlay.end.getTime() > span.end.getTime() ? overlay.end : span.end
-  const totalMs = end.getTime() - start.getTime()
-  const plannedLeft = ((span.start.getTime() - start.getTime()) / totalMs) * 100
-  const plannedRight = ((end.getTime() - span.end.getTime()) / totalMs) * 100
-  const insetStyle = `--planned-left: ${plannedLeft}%; --planned-right: ${plannedRight}%;`
+  const startMs = Math.min(overlay.start.getTime(), span.start.getTime())
+  const projectedEndMs = projection?.projectedDisplayEnd.getTime()
+  const endMs = Math.max(
+    span.end.getTime(),
+    overlay.end.getTime(),
+    projectedEndMs ?? -Infinity,
+  )
+  const start = new Date(startMs)
+  const end = new Date(endMs)
+  const totalMs = endMs - startMs
+
+  const plannedLeft = ((span.start.getTime() - startMs) / totalMs) * 100
+  const plannedRight = ((endMs - span.end.getTime()) / totalMs) * 100
+  const styleParts = [`--planned-left: ${plannedLeft}%;`, `--planned-right: ${plannedRight}%;`]
+
+  if (progressPct != null) {
+    const plannedWidthPct = 100 - plannedLeft - plannedRight
+    const progressPoint = plannedLeft + (progressPct / 100) * plannedWidthPct
+    styleParts.push(`--progress-point: ${progressPoint}%;`)
+  }
+
+  if (projection?.kind === 'ahead') {
+    const ratio = ((projectedEndMs! - startMs) / totalMs) * 100
+    styleParts.push(`--projection-ratio: ${ratio}%;`)
+  } else if (projection?.kind === 'behind') {
+    const ratio = ((span.end.getTime() - startMs) / totalMs) * 100
+    const endRight = ((endMs - projectedEndMs!) / totalMs) * 100
+    styleParts.push(`--projection-ratio: ${ratio}%;`, `--projection-end-right: ${endRight}%;`)
+  }
+
+  const insetStyle = styleParts.join(' ')
   return {
     start,
     end,
@@ -319,6 +396,7 @@ export function buildItemsAndGroups(
     items: [],
     widenedByItemId: new Map(),
     widenedByActualId: new Map(),
+    widenedByActualAndProjectionId: new Map(),
     groups: [],
     visuals,
     rowIdByItemId,
@@ -369,6 +447,7 @@ export function buildItemsAndGroups(
   const items: DataItem[] = []
   const widenedByItemId = new Map<string, WidenedProjection>()
   const widenedByActualId = new Map<string, WidenedActualOverlay>()
+  const widenedByActualAndProjectionId = new Map<string, WidenedActualOverlay>()
   const groupTree = new Map<string, GroupNode>()
 
   const registerPath = (path: GroupPath) => {
@@ -455,7 +534,11 @@ export function buildItemsAndGroups(
       if (actualOverlay) {
         widenedByActualId.set(
           itemId,
-          resolveActualOverlayWidening(span, actualOverlay, style),
+          resolveActualOverlayWidening(span, actualOverlay, null, pct, style),
+        )
+        widenedByActualAndProjectionId.set(
+          itemId,
+          resolveActualOverlayWidening(span, actualOverlay, projection, pct, style),
         )
       }
       // The caller substitutes this for the item's real end/style while the
@@ -533,6 +616,7 @@ export function buildItemsAndGroups(
     items,
     widenedByItemId,
     widenedByActualId,
+    widenedByActualAndProjectionId,
     groups,
     visuals,
     rowIdByItemId,
