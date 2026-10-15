@@ -3,20 +3,20 @@ import type { CustomPluginConfigOptions } from '@sigmacomputing/plugin'
 export const SOURCE = 'source'
 export const SOURCE_B = 'sourceB'
 
+// Sigma's `type: 'group'` can ONLY contain `type: 'text'` children (via the
+// child's own `source` pointing at the group's `name`) — confirmed against
+// the plugin-development docs after this panel's `plannedDatesGroup`/
+// `actualDatesGroup`/`otherFieldsGroup` headers (an earlier attempt to
+// section off the column/variable/action-trigger fields below) rendered as
+// permanently empty in a live workbook. There's no API-level way to visually
+// group a `column`, `variable`, or `action-trigger` field at all, so those
+// fields below are organized by order and label alone; `MENU_LABELS_GROUP`
+// further down is the one place grouping actually works, since its two
+// fields are genuinely `type: 'text'`.
+const MENU_LABELS_GROUP = 'menuLabelsGroup'
+
 export const editorPanelConfig: CustomPluginConfigOptions[] = [
   { name: SOURCE, type: 'element', label: 'Data source' },
-
-  // Purely cosmetic — only ever used to relabel this source in the plugin's
-  // own rendered show/hide menu (e.g. "Show Roadmap" instead of "Show
-  // Source A"). Sigma's editor-panel field labels are static, so this can't
-  // relabel anything in this panel itself — "Data source" above still just
-  // says that, during setup it's always "Source A"/"Source B".
-  {
-    name: 'sourceAName',
-    type: 'text',
-    label: 'Source A name (optional — used in the show/hide menu)',
-    placeholder: 'Source A',
-  },
 
   {
     name: 'idColumn',
@@ -43,12 +43,10 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     allowMultiple: true,
   },
 
-  { name: 'plannedDatesGroup', type: 'group', label: 'Planned dates' },
-
   {
     name: 'startDate',
     type: 'column',
-    label: 'Start date',
+    label: 'Planned start date',
     source: SOURCE,
     allowedTypes: ['datetime'],
     allowMultiple: false,
@@ -57,7 +55,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'endDate',
     type: 'column',
-    label: 'End date',
+    label: 'Planned end date',
     source: SOURCE,
     allowedTypes: ['datetime'],
     allowMultiple: false,
@@ -66,7 +64,7 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'projectedEndColumn',
     type: 'column',
-    label: 'Projected end date',
+    label: 'Projected end date (optional)',
     source: SOURCE,
     allowedTypes: ['datetime'],
     allowMultiple: false,
@@ -75,12 +73,12 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   // Optional — surfaces when a child ticket actually started/is projected to
   // finish, independent of the planned dates above. Both columns must be set
   // for the overlay to render; see buildItems.ts's resolveActualOverlay.
-  { name: 'actualDatesGroup', type: 'group', label: 'Actual dates (optional)' },
-
+  // "Actual" is in both labels since there's no group header to carry that
+  // context anymore (see the note on MENU_LABELS_GROUP above).
   {
     name: 'actualStartColumn',
     type: 'column',
-    label: 'Actual start date',
+    label: 'Actual start date (optional)',
     source: SOURCE,
     allowedTypes: ['datetime'],
     allowMultiple: false,
@@ -89,13 +87,11 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   {
     name: 'projectedActualEndColumn',
     type: 'column',
-    label: 'Projected actual end date',
+    label: 'Actual projected end date (optional)',
     source: SOURCE,
     allowedTypes: ['datetime'],
     allowMultiple: false,
   },
-
-  { name: 'otherFieldsGroup', type: 'group', label: 'Other fields' },
 
   {
     name: 'highlightColorColumn',
@@ -148,12 +144,24 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     allowMultiple: false,
   },
 
+  // Edit pair and select pair are each two fields (a variable + the action
+  // that fires after it's set) — can't be real Sigma groups (both are
+  // `variable`/`action-trigger`, not `type: 'text'`; see the note on
+  // MENU_LABELS_GROUP above), so the "Edit:"/"On select:" label prefixes and
+  // keeping each pair adjacent are the only tools available to signal that
+  // relationship.
   {
     name: 'editPayloadVariable',
     type: 'variable',
     label:
-      'Edit payload variable (text; JSON keyed by your source column names: id, start, end, and each Group-by column)',
+      'Edit: payload variable (JSON keyed by your source column names: id, start, end, and each Group-by column)',
     allowedTypes: ['text'],
+  },
+
+  {
+    name: 'editAction',
+    type: 'action-trigger',
+    label: 'Edit: action (fires after the payload variable is set)',
   },
 
   {
@@ -163,15 +171,9 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
   },
 
   {
-    name: 'editAction',
-    type: 'action-trigger',
-    label: 'Edit action',
-  },
-
-  {
     name: 'selectAction',
     type: 'action-trigger',
-    label: 'On select action (fires after the JSON is set)',
+    label: 'On select: action (fires after the record id is set)',
   },
 
   // Second source — read-only, rendered on the same chart as the
@@ -182,14 +184,6 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     name: SOURCE_B,
     type: 'element',
     label: 'Second source (optional, read-only)',
-  },
-
-  // Same purely-cosmetic role as sourceAName above, for Source B.
-  {
-    name: 'sourceBName',
-    type: 'text',
-    label: 'Source B name (optional — used in the show/hide menu)',
-    placeholder: 'Source B',
   },
 
   {
@@ -276,5 +270,30 @@ export const editorPanelConfig: CustomPluginConfigOptions[] = [
     label: 'Source B: hover description column (optional)',
     source: SOURCE_B,
     allowMultiple: false,
+  },
+
+  // The one real group in this panel — both fields are genuinely `type:
+  // 'text'`, which is the only child type Sigma's group mechanism supports
+  // (see the note above MENU_LABELS_GROUP). Purely cosmetic: relabels "Show
+  // Source A"/"Show Source B" in the plugin's own rendered show/hide menu
+  // (e.g. "Show Roadmap"/"Show On-Call"). Sigma's editor-panel field labels
+  // are static, so this can't relabel anything in THIS panel — "Data
+  // source"/"Second source" above always just say that.
+  { name: MENU_LABELS_GROUP, type: 'group', label: 'Show/hide menu labels (optional)' },
+
+  {
+    name: 'sourceAName',
+    type: 'text',
+    source: MENU_LABELS_GROUP,
+    label: 'Source A name',
+    placeholder: 'Source A',
+  },
+
+  {
+    name: 'sourceBName',
+    type: 'text',
+    source: MENU_LABELS_GROUP,
+    label: 'Source B name',
+    placeholder: 'Source B',
   },
 ]

@@ -81,24 +81,72 @@ describe('editorPanelConfig', () => {
     })
   })
 
-  test('Source A fields are grouped into planned/actual/other sub-sections', () => {
-    const names = editorPanelConfig.map((e) => e.name)
+  // Sigma's `type: 'group'` can only contain `type: 'text'` children (via
+  // the child's `source` pointing at the group's `name`) — this panel used
+  // to have three group headings trying to section off `column`/`variable`/
+  // `action-trigger` fields, which rendered as permanently empty in a live
+  // workbook since there's no API-level way to nest those types under a
+  // group at all. Encoding the actual constraint here (rather than just a
+  // comment) so a future group addition can't silently reintroduce an empty
+  // section the same way.
+  test('every group only has type:text children sourced from it (Sigma cannot nest other types in a group)', () => {
     const groupNames = editorPanelConfig
       .filter((e) => e.type === 'group')
       .map((e) => e.name)
-    expect(groupNames).toEqual([
-      'plannedDatesGroup',
-      'actualDatesGroup',
-      'otherFieldsGroup',
-    ])
-    // Each date column sits after its section's group heading and before the
-    // next one, i.e. the headings actually bracket the fields they describe.
+    expect(groupNames.length).toBeGreaterThan(0)
+    for (const groupName of groupNames) {
+      const children = editorPanelConfig.filter(
+        (e) => 'source' in e && e.source === groupName,
+      )
+      expect(children.length).toBeGreaterThan(0)
+      for (const child of children) {
+        expect(child.type).toBe('text')
+      }
+    }
+    // No column/variable/action-trigger field should ever point its `source`
+    // at a group name — that's the exact, now-fixed mistake (a `source`
+    // meant for an `element` name was instead pointing at a group).
+    const groupNameSet = new Set(groupNames)
+    for (const entry of editorPanelConfig) {
+      if (entry.type === 'column' && groupNameSet.has(entry.source)) {
+        throw new Error(`${entry.name} sources from a group, not an element`)
+      }
+    }
+  })
+
+  test('planned and actual date columns are adjacent and clearly labeled, with no group header needed', () => {
+    const names = editorPanelConfig.map((e) => e.name)
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
     const indexOf = (name: string) => names.indexOf(name)
-    expect(indexOf('plannedDatesGroup')).toBeLessThan(indexOf('startDate'))
-    expect(indexOf('startDate')).toBeLessThan(indexOf('actualDatesGroup'))
-    expect(indexOf('actualDatesGroup')).toBeLessThan(indexOf('actualStartColumn'))
-    expect(indexOf('actualStartColumn')).toBeLessThan(indexOf('otherFieldsGroup'))
-    expect(indexOf('otherFieldsGroup')).toBeLessThan(indexOf('highlightColorColumn'))
+
+    // Order alone carries the grouping now (see the test above for why a
+    // group heading can't): planned dates together, then actual dates.
+    expect(indexOf('startDate')).toBeLessThan(indexOf('endDate'))
+    expect(indexOf('endDate')).toBeLessThan(indexOf('projectedEndColumn'))
+    expect(indexOf('projectedEndColumn')).toBeLessThan(indexOf('actualStartColumn'))
+    expect(indexOf('actualStartColumn')).toBeLessThan(
+      indexOf('projectedActualEndColumn'),
+    )
+
+    // Labels carry the "actual" distinction instead of a group heading.
+    expect(byName.actualStartColumn).toMatchObject({
+      label: expect.stringMatching(/actual/i),
+    })
+    expect(byName.projectedActualEndColumn).toMatchObject({
+      label: expect.stringMatching(/actual/i),
+    })
+  })
+
+  test('sourceAName/sourceBName are grouped together under menuLabelsGroup', () => {
+    const byName = Object.fromEntries(editorPanelConfig.map((e) => [e.name, e]))
+    expect(byName.sourceAName).toMatchObject({
+      type: 'text',
+      source: 'menuLabelsGroup',
+    })
+    expect(byName.sourceBName).toMatchObject({
+      type: 'text',
+      source: 'menuLabelsGroup',
+    })
   })
 
   test('edit slots are present: text variable + action trigger', () => {
