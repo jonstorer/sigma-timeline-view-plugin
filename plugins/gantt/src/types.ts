@@ -69,14 +69,15 @@ export interface ItemVisual {
 export interface WidenedProjection {
   /** The projected display end to substitute for the item's real end. */
   end: Date
-  /** The item's style string recomputed with `--progress` rescaled to the
-   * widened box — the fill is a % of the item's own (always-visible) width,
-   * so widening without rescaling would shrink its absolute position even
-   * though the underlying progress value didn't change. Undefined when the
-   * item has no progress value (nothing needs to change from the base
-   * style — `--projection-ratio` itself is inert until `show-projection` is
-   * present, so it doesn't need a toggle-aware variant). */
-  style?: string
+  /** The item's base style with `--planned-right` appended (how far the
+   * widened box's new right edge sits past the planned bar's own real end —
+   * see App.css's overage `::before` strip, which the main card needs to
+   * pull back from) and, when there's a progress value, `--progress`
+   * rescaled to the widened box — the fill is a % of the item's own
+   * (always-visible) width, so widening without rescaling would shrink its
+   * absolute position even though the underlying progress value didn't
+   * change. */
+  style: string
 }
 
 export interface WidenedActualOverlay {
@@ -87,17 +88,24 @@ export interface WidenedActualOverlay {
    * than the planned start) as part of this item's own footprint. */
   start: Date
   end: Date
-  /** The item's base style with `--planned-left`/`--planned-right` (and,
-   * when there's a progress value, `--progress-point`) appended — where the
-   * real planned bar (and its progress fill) sits within this widened box,
-   * as a percentage of the box's own width. Consumed by the
-   * `.has-actual-overlay` `background-image` gradient layers in App.css —
-   * see `resolveActualOverlayWidening`'s doc comment in buildItems.ts for
-   * why this is a CSS gradient on the item itself rather than a DOM wrapper.
-   * When composed with a projection (see `resolveActualOverlayWidening`),
-   * also carries a corrected `--projection-ratio` (and, for a "behind"
-   * projection, `--projection-end-right`) relative to this same widened
-   * box, overriding the stale value baked into the base style. */
+  /** The item's base style with the following appended, all percentages of
+   * this widened box's own width:
+   *   - `--planned-left`/`--planned-right` — where the planned bar sits.
+   *   - `--actual-left`/`--actual-right` — where the actual-dates strip sits
+   *     (independent of the planned bounds above — see
+   *     `resolveActualOverlayWidening`'s doc comment in buildItems.ts for why
+   *     each piece needs its own bounds rather than one shared line).
+   *   - `--actual-elapsed-ratio` — within the actual strip's OWN width (not
+   *     this outer box), how much of it is elapsed as of build time.
+   *   - `--progress-point`, when there's a progress value — where the
+   *     planned bar's fill ends.
+   *   - When composed with a projection, a corrected `--projection-ratio`
+   *     (and, for a "behind" projection, `--projection-end-right`) relative
+   *     to this same widened box, overriding the stale value baked into the
+   *     base style.
+   * Consumed by App.css's `has-actual-overlay`/`has-projection-*` rules —
+   * see `resolveActualOverlayWidening`'s doc comment in buildItems.ts for why
+   * this is CSS on the item itself rather than a DOM wrapper. */
   style: string
 }
 

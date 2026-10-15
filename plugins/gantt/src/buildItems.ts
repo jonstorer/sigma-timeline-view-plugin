@@ -253,50 +253,66 @@ export function resolveActualOverlay(
 /**
  * Widen an item's own box to the union of its planned span, its actual-
  * overlay span, and — when `projection` is passed — its projected-completion
- * end too, so all three signals can render on the same bar at once rather
- * than one suppressing another. Also computes a style carrying where the
- * real planned bar sits within that widened box (`--planned-left`/
- * `--planned-right`, percentages of the widened box's own width), consumed
- * by App.css's `.has-actual-overlay` `background-image` gradient layers (the
- * "solid card" look, inset within the wider, translucent outer box).
+ * end too, so vis-timeline's own stacking treats the full visual footprint
+ * (planned bar plus either overlay strip) as this item's own space. Also
+ * computes where each piece sits within that widened box, as percentages of
+ * the box's own width, consumed by App.css.
  *
- * This used to be a DOM wrapper (`.ts-planned-inset`) instead of a CSS
- * gradient. Confirmed live and in vis-timeline's own source
- * (`dom.content.style.transform = ...` in its default item-align branch):
- * whenever an item's left edge scrolls past the visible window, vis-timeline
- * applies a `transform: translateX(...)` to `.vis-item-content` to keep the
- * label visible (its "sticky label" feature) — a CSS transform drags its
- * *entire* subtree along with it, so a DOM wrapper nested in there (the
- * white card, including its progress fill) visibly slid within the bar
- * during a horizontal scroll, independent of its own CSS. A plain
- * `background-image` on the outer box itself isn't inside `.vis-item-content`
- * at all, so it's immune — at the cost of losing the rounded corners on the
- * inner edges (a gradient can't do partial rounding; only the box's own true
- * corners, at the far ends, stay rounded).
+ * Three designs so far, each confirmed live (jsdom doesn't do real layout, so
+ * unit tests caught none of this):
+ *   1. A separate `type:'background'` DataItem scoped to the row's `group`.
+ *      Broke down the moment a lane held more than one stacked item — see
+ *      `resolveActualOverlay`'s doc comment.
+ *   2. A DOM wrapper (`.ts-planned-inset`) inset within the widened box,
+ *      rendering the planned "card" and the translucent actual overhang on
+ *      one shared line. Broke on scroll: vis-timeline applies
+ *      `transform: translateX(...)` to `.vis-item-content` to keep an
+ *      off-screen item's label visible (confirmed in its source), and that
+ *      drags any DOM descendant along with it — including this wrapper's
+ *      progress fill, which visibly slid within the bar.
+ *   3. (current) Everything painted via `background-image` on the outer box
+ *      itself (immune to the transform above — it isn't inside
+ *      `.vis-item-content`) plus two small `::before`/`::after` pseudo-
+ *      element strips, one above the planned bar for its own projection
+ *      overage/saved time, one below for the actual-dates span — rather than
+ *      composing both signals onto the single planned line. This is what
+ *      `--planned-left`/`--planned-right` (where the planned card sits) and
+ *      `--actual-left`/`--actual-right` (where the actual strip sits) are
+ *      for: each piece gets its own independent horizontal bounds within the
+ *      shared widened box, instead of reconciling two signals onto one line.
  *
  * Unlike `resolveProjection` alone, this can widen *either* edge (an actual
  * start earlier than planned is exactly the "ahead" case this feature exists
- * to surface), so the inset has two independent insets rather than one ratio.
+ * to surface), so the planned inset has two independent sides rather than
+ * one ratio.
  *
  * When `projection` is passed, `resolveProjection`'s own `--projection-ratio`
  * (computed relative to the *unwidened* planned box) is stale once this box
  * is wider — recomputed here relative to the actual union box instead, and
  * appended after `baseStyle` so the corrected value wins (CSS custom
  * properties declared twice in one inline style resolve to the last one).
- * The "behind" case also needs `--projection-end-right`: the existing CSS
- * rule assumes the box's own right edge *is* the projected end (`right: 0`),
- * which only holds when nothing widens further right than that — pass a
- * right-inset percentage so the red overrun stripe stops at the projected
- * end even when the actual-overlay's own end extends past it. This part is
- * unaffected by the sticky-label bug above — the projection marker is a
- * `::after` pseudo-element on `.vis-item` itself, not inside
- * `.vis-item-content`, so it was never subject to it.
+ * The "behind" case also needs `--projection-end-right`: the overage strip's
+ * own CSS defaults its right edge to the box's own right edge, which only
+ * holds when nothing widens further right than the projected end — pass a
+ * right-inset percentage so the strip stops at the projected end even when
+ * the actual-overlay's own end extends past it.
  *
  * `progressPct` (0–100, or null) computes `--progress-point`: where the
  * progress-tinted portion ends, as an absolute percentage of the *widened*
  * box — the existing `--progress` percentage is relative to the item's own
  * (real, unwidened) width, which no longer matches this box's width once
  * widened, so it has to be rebased here rather than reused as-is.
+ *
+ * `now` computes `--actual-elapsed-ratio`: the fraction (0–100%) of the
+ * actual span itself (not the widened box — the bottom strip's own pseudo-
+ * element is already inset to `--actual-left`/`--actual-right`, so its own
+ * internal gradient stops are relative to its own width) that's elapsed as
+ * of `now`, clamped to the overlay's own start/end. There's no separate
+ * "actual progress %" column — actual start is the only real data point, so
+ * elapsed-so-far is the closest available stand-in for progress on that
+ * side, mirroring the planned bar's progress fill. Passed in rather than
+ * read via `new Date()` here to keep this function pure/testable; the real
+ * call site passes the real current time.
  */
 export function resolveActualOverlayWidening(
   span: { start: Date; end: Date },
@@ -304,6 +320,7 @@ export function resolveActualOverlayWidening(
   projection: ReturnType<typeof resolveProjection>,
   progressPct: number | null,
   baseStyle: string | undefined,
+  now: Date,
 ): WidenedActualOverlay {
   const startMs = Math.min(overlay.start.getTime(), span.start.getTime())
   const projectedEndMs = projection?.projectedDisplayEnd.getTime()
@@ -318,7 +335,23 @@ export function resolveActualOverlayWidening(
 
   const plannedLeft = ((span.start.getTime() - startMs) / totalMs) * 100
   const plannedRight = ((endMs - span.end.getTime()) / totalMs) * 100
-  const styleParts = [`--planned-left: ${plannedLeft}%;`, `--planned-right: ${plannedRight}%;`]
+  const actualLeft = ((overlay.start.getTime() - startMs) / totalMs) * 100
+  const actualRight = ((endMs - overlay.end.getTime()) / totalMs) * 100
+  const styleParts = [
+    `--planned-left: ${plannedLeft}%;`,
+    `--planned-right: ${plannedRight}%;`,
+    `--actual-left: ${actualLeft}%;`,
+    `--actual-right: ${actualRight}%;`,
+  ]
+
+  const clampedNowMs = Math.min(
+    Math.max(now.getTime(), overlay.start.getTime()),
+    overlay.end.getTime(),
+  )
+  const elapsedRatio =
+    ((clampedNowMs - overlay.start.getTime()) / (overlay.end.getTime() - overlay.start.getTime())) *
+    100
+  styleParts.push(`--actual-elapsed-ratio: ${elapsedRatio}%;`)
 
   if (progressPct != null) {
     const plannedWidthPct = 100 - plannedLeft - plannedRight
@@ -448,6 +481,11 @@ export function buildItemsAndGroups(
   const widenedByItemId = new Map<string, WidenedProjection>()
   const widenedByActualId = new Map<string, WidenedActualOverlay>()
   const widenedByActualAndProjectionId = new Map<string, WidenedActualOverlay>()
+  // One `now` per build (not per row) — the actual-dates elapsed strip only
+  // needs to be roughly current, not instant-accurate, and a single value
+  // keeps every row's elapsed ratio consistent with the others in the same
+  // render.
+  const now = new Date()
   const groupTree = new Map<string, GroupNode>()
 
   const registerPath = (path: GroupPath) => {
@@ -534,36 +572,37 @@ export function buildItemsAndGroups(
       if (actualOverlay) {
         widenedByActualId.set(
           itemId,
-          resolveActualOverlayWidening(span, actualOverlay, null, pct, style),
+          resolveActualOverlayWidening(span, actualOverlay, null, pct, style, now),
         )
         widenedByActualAndProjectionId.set(
           itemId,
-          resolveActualOverlayWidening(span, actualOverlay, projection, pct, style),
+          resolveActualOverlayWidening(span, actualOverlay, projection, pct, style, now),
         )
       }
       // The caller substitutes this for the item's real end/style while the
       // projection toggle is on — see `resolveProjection`'s doc comment for
       // why widening the item itself (not a sibling) is what makes
       // vis-timeline's stacking treat the overrun as this item's own
-      // footprint, with nothing to misalign. The style override only exists
-      // when there's a progress fill to rescale — the fill is a % of the
+      // footprint, with nothing to misalign. The style always gets a
+      // `--planned-right` inset (see App.css's overage `::before` strip doc
+      // comment — the main card needs to pull back from the widened box's
+      // new right edge, leaving that space for the strip) plus a rescaled
+      // `--progress` when there's a fill to rescale — the fill is a % of the
       // item's own (always-visible) width, so widening without rescaling
       // would shrink its absolute position even though the progress value
-      // didn't change. (--projection-ratio itself doesn't need this: it's
-      // gated behind the `show-projection` class, so it's inert in the base
-      // style — only the always-visible progress fill needs a toggle-aware
-      // variant.)
+      // didn't change.
       if (projection?.kind === 'behind') {
         const widenedStyleParts =
           progressPartIndex === -1
-            ? null
+            ? styleParts
             : styleParts.with(
                 progressPartIndex,
                 `--progress: ${pct! * projection.realRatio}%;`,
               )
+        const plannedRight = (1 - projection.realRatio) * 100
         widenedByItemId.set(itemId, {
           end: projection.displayEnd,
-          ...(widenedStyleParts ? { style: widenedStyleParts.join(' ') } : {}),
+          style: [...widenedStyleParts, `--planned-right: ${plannedRight}%;`].join(' '),
         })
       }
     }

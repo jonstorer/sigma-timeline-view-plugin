@@ -146,14 +146,17 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
-  // Whether the projected-completion overlay is shown. For an ahead-of-
-  // schedule item this is a pure CSS toggle (the `show-projection` class
-  // below gates a rule already baked into the item's style/className). For a
-  // behind-schedule item it also substitutes the item's widened display end
-  // into the synced DataSet (see the items/groups sync effect) — read via
-  // showProjectionRef inside onMove, which needs the live value to decide
-  // whether to compensate drag write-back math.
-  const [showProjection, setShowProjection] = useState(false)
+  // Whether the projected-completion overlay is shown. On by default — once
+  // a row has the data to show (projectedEndColumn configured), the overlay
+  // is meant to always be visible, with the checkbox there to turn it OFF
+  // rather than opt it in. For an ahead-of-schedule item this is a pure CSS
+  // toggle (the `show-projection` class below gates a rule already baked
+  // into the item's style/className). For a behind-schedule item it also
+  // substitutes the item's widened display end into the synced DataSet (see
+  // the items/groups sync effect) — read via showProjectionRef inside
+  // onMove, which needs the live value to decide whether to compensate drag
+  // write-back math.
+  const [showProjection, setShowProjection] = useState(true)
   const showProjectionRef = useRef(showProjection)
   // Source A shows by default; source B starts hidden so it doesn't crowd
   // the primary source's own items on first load. Each checkbox only hides
@@ -163,11 +166,12 @@ export function LiveTimeline({
   const [hideSourceA, setHideSourceA] = useState(false)
   const [hideSourceB, setHideSourceB] = useState(true)
   // Independent of showProjection — a separate, optional overlay sourced
-  // from its own pair of columns (see resolveActualOverlay). Off by default,
-  // same reasoning as hideSourceB: don't crowd the primary view uninvited.
-  // Read inside onMove (via showActualDatesRef) for the same reason as
+  // from its own pair of columns (see resolveActualOverlay). On by default,
+  // same reasoning as showProjection above: once a row has actual-dates data
+  // configured, show it — the checkbox is an opt-out, not an opt-in. Read
+  // inside onMove (via showActualDatesRef) for the same reason as
   // showProjectionRef: drag write-back needs to know whether to compensate.
-  const [showActualDates, setShowActualDates] = useState(false)
+  const [showActualDates, setShowActualDates] = useState(true)
   const showActualDatesRef = useRef(showActualDates)
   // Display settings (the three show/hide checkboxes) live behind a gear
   // button rather than always-visible header checkboxes.
@@ -344,13 +348,19 @@ export function LiveTimeline({
         // `item.vertical / 2` at the bottom, so a small vertical left items
         // flush against the lane bottom. Bump vertical for a real bottom gap
         // (also widens spacing between stacked items, the same knob).
+        // Trimmed down from 24 now that a row with a projection and/or
+        // actual-dates strip always reserves its own extra height (see
+        // --top-strip-space/--bottom-strip-space in App.css) — the two
+        // margins used to each be doing a similar job (breathing room around
+        // a bar), so shrinking this one keeps overall row density from
+        // growing by both amounts at once.
         //
         // horizontal is 0, not some breathing-room value, because margin is
         // measured in pixels, not time: any positive value forces back-to-
         // back items (zero time gap, e.g. two contiguous on-call shifts in
         // source B) onto separate stacked lines, since their rendered gap is
         // always 0px — less than any positive margin, at any zoom level.
-        item: { vertical: 24, horizontal: 0 },
+        item: { vertical: 14, horizontal: 0 },
         axis: 24,
       },
       verticalScroll: true,
