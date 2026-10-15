@@ -765,6 +765,12 @@ export function LiveTimeline({
               </button>
               {settingsOpen && (
                 <div className="timeline-settings-menu" role="menu">
+                  {/* Roadmap group first (Source A + its two overlay toggles),
+                      Source B (the read-only on-call schedule overlay — a
+                      different kind of thing entirely, not a roadmap signal)
+                      set apart below a divider, rather than interleaved
+                      between the projected-completion and actual-dates
+                      toggles where it used to sit. */}
                   <label className="timeline-settings-item">
                     <input
                       type="checkbox"
@@ -773,16 +779,6 @@ export function LiveTimeline({
                     />
                     Show {sourceALabel}
                   </label>
-                  {config?.sourceB && (
-                    <label className="timeline-settings-item">
-                      <input
-                        type="checkbox"
-                        checked={!hideSourceB}
-                        onChange={(e) => setHideSourceB(!e.target.checked)}
-                      />
-                      Show {sourceBLabel}
-                    </label>
-                  )}
                   {config?.projectedEndColumn && (
                     <label className="timeline-settings-item">
                       <input
@@ -802,6 +798,19 @@ export function LiveTimeline({
                       />
                       Show actual dates
                     </label>
+                  )}
+                  {config?.sourceB && (
+                    <>
+                      <div className="timeline-settings-divider" role="separator" />
+                      <label className="timeline-settings-item">
+                        <input
+                          type="checkbox"
+                          checked={!hideSourceB}
+                          onChange={(e) => setHideSourceB(!e.target.checked)}
+                        />
+                        Show {sourceBLabel}
+                      </label>
+                    </>
                   )}
                 </div>
               )}

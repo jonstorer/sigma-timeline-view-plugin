@@ -105,6 +105,16 @@
   border-radius: 4px;
 }
 
+/* Separates the roadmap toggles (Source A + its two overlay checkboxes)
+   from Source B (the read-only on-call schedule overlay) below it — a
+   different kind of thing from the roadmap signals above, not another
+   roadmap toggle. */
+.timeline-settings-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 2px 0;
+}
+
 .timeline-settings-item:hover {
   background: #f3f4f6;
 }
