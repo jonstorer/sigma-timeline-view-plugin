@@ -21,7 +21,12 @@ import {
   formatSigmaDateTime,
   snapDisplaySpan,
 } from './weekSpan'
-import type { ItemVisual, TimelineConfig, WidenedProjection } from './types'
+import type {
+  ItemVisual,
+  TimelineConfig,
+  WidenedActualOverlay,
+  WidenedProjection,
+} from './types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
@@ -141,14 +146,17 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
-  // Whether the projected-completion overlay is shown. For an ahead-of-
-  // schedule item this is a pure CSS toggle (the `show-projection` class
-  // below gates a rule already baked into the item's style/className). For a
-  // behind-schedule item it also substitutes the item's widened display end
-  // into the synced DataSet (see the items/groups sync effect) — read via
-  // showProjectionRef inside onMove, which needs the live value to decide
-  // whether to compensate drag write-back math.
-  const [showProjection, setShowProjection] = useState(false)
+  // Whether the projected-completion overlay is shown. On by default — once
+  // a row has the data to show (projectedEndColumn configured), the overlay
+  // is meant to always be visible, with the checkbox there to turn it OFF
+  // rather than opt it in. For an ahead-of-schedule item this is a pure CSS
+  // toggle (the `show-projection` class below gates a rule already baked
+  // into the item's style/className). For a behind-schedule item it also
+  // substitutes the item's widened display end into the synced DataSet (see
+  // the items/groups sync effect) — read via showProjectionRef inside
+  // onMove, which needs the live value to decide whether to compensate drag
+  // write-back math.
+  const [showProjection, setShowProjection] = useState(true)
   const showProjectionRef = useRef(showProjection)
   // Source A shows by default; source B starts hidden so it doesn't crowd
   // the primary source's own items on first load. Each checkbox only hides
@@ -157,15 +165,30 @@ export function LiveTimeline({
   // disappears (see visibleGroups/pruneEmptyGroups).
   const [hideSourceA, setHideSourceA] = useState(false)
   const [hideSourceB, setHideSourceB] = useState(true)
+  // Independent of showProjection — a separate, optional overlay sourced
+  // from its own pair of columns (see resolveActualOverlay). On by default,
+  // same reasoning as showProjection above: once a row has actual-dates data
+  // configured, show it — the checkbox is an opt-out, not an opt-in. Read
+  // inside onMove (via showActualDatesRef) for the same reason as
+  // showProjectionRef: drag write-back needs to know whether to compensate.
+  const [showActualDates, setShowActualDates] = useState(true)
+  const showActualDatesRef = useRef(showActualDates)
   // Display settings (the three show/hide checkboxes) live behind a gear
   // button rather than always-visible header checkboxes.
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement | null>(null)
-  // Item id -> real (unwidened) display end, kept alongside
-  // widenedByItemIdRef so onMove can recover how much a behind-schedule
-  // item's end was widened by, to compensate a drag on it (see onMove).
+  // Item id -> real (unwidened) display start/end, kept alongside
+  // widenedByItemIdRef/widenedByActualIdRef so onMove can recover how much an
+  // item's start/end was widened by, to compensate a drag on it (see
+  // onMove). Projection only ever widens the end; the actual-overlay can
+  // widen either edge, hence the separate start map.
+  const baseStartByItemIdRef = useRef<Map<string, Date>>(new Map())
   const baseEndByItemIdRef = useRef<Map<string, Date>>(new Map())
   const widenedByItemIdRef = useRef<Map<string, WidenedProjection>>(new Map())
+  const widenedByActualIdRef = useRef<Map<string, WidenedActualOverlay>>(new Map())
+  const widenedByActualAndProjectionIdRef = useRef<Map<string, WidenedActualOverlay>>(
+    new Map(),
+  )
   // Whether groupsDs is currently the Timeline's active groups source. Lets
   // the sync effect below skip re-calling setGroups() when nothing about
   // grouped-vs-ungrouped changed — see that effect for why it matters.
@@ -187,6 +210,8 @@ export function LiveTimeline({
   const primary = useMemo(() => buildItemsAndGroups(config, data), [config, data])
   const {
     widenedByItemId,
+    widenedByActualId,
+    widenedByActualAndProjectionId,
     rowIdByItemId,
     groupColumns,
     originalPathByItemId,
@@ -208,12 +233,13 @@ export function LiveTimeline({
   // Hiding a source filters which items are drawn; a row that still has the
   // other source's items in it is untouched, but a row left with nothing at
   // all is pruned too (see pruneEmptyGroups) rather than lingering as an
-  // empty swimlane.
+  // empty swimlane. The actual-dates overlay is no longer a separate item
+  // (see buildItems.ts) — it's a style/widen variation applied to the main
+  // item below, so hiding Source A already hides it with no special case
+  // needed here.
   const visibleItems = useMemo(
     () =>
-      items.filter((item) =>
-        isSourceBItemId(item.id) ? !hideSourceB : !hideSourceA,
-      ),
+      items.filter((item) => (isSourceBItemId(item.id) ? !hideSourceB : !hideSourceA)),
     [items, hideSourceA, hideSourceB],
   )
   const visibleGroups = useMemo(
@@ -247,13 +273,35 @@ export function LiveTimeline({
   }, [settingsOpen])
 
   useEffect(() => {
+    showActualDatesRef.current = showActualDates
+  }, [showActualDates])
+
+  // Close the settings dropdown on an outside click. Only listens while
+  // open, so this costs nothing the rest of the time.
+  useEffect(() => {
+    if (!settingsOpen) return
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) {
+        setSettingsOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [settingsOpen])
+
+  useEffect(() => {
     widenedByItemIdRef.current = widenedByItemId
+    widenedByActualIdRef.current = widenedByActualId
+    widenedByActualAndProjectionIdRef.current = widenedByActualAndProjectionId
     baseEndByItemIdRef.current = new Map(
       items
         .filter((item) => item.end != null)
         .map((item) => [String(item.id), item.end as Date]),
     )
-  }, [items, widenedByItemId])
+    baseStartByItemIdRef.current = new Map(
+      items.map((item) => [String(item.id), item.start as Date]),
+    )
+  }, [items, widenedByItemId, widenedByActualId, widenedByActualAndProjectionId])
 
   useEffect(() => {
     configRef.current = config
@@ -313,13 +361,19 @@ export function LiveTimeline({
         // `item.vertical / 2` at the bottom, so a small vertical left items
         // flush against the lane bottom. Bump vertical for a real bottom gap
         // (also widens spacing between stacked items, the same knob).
+        // Trimmed down from 24 now that a row with a projection and/or
+        // actual-dates strip always reserves its own extra height (see
+        // --top-strip-space/--bottom-strip-space in App.css) — the two
+        // margins used to each be doing a similar job (breathing room around
+        // a bar), so shrinking this one keeps overall row density from
+        // growing by both amounts at once.
         //
         // horizontal is 0, not some breathing-room value, because margin is
         // measured in pixels, not time: any positive value forces back-to-
         // back items (zero time gap, e.g. two contiguous on-call shifts in
         // source B) onto separate stacked lines, since their rendered gap is
         // always 0px — less than any positive margin, at any zoom level.
-        item: { vertical: 24, horizontal: 0 },
+        item: { vertical: 14, horizontal: 0 },
         axis: 24,
       },
       verticalScroll: true,
@@ -377,14 +431,32 @@ export function LiveTimeline({
         // with no preceding panmove. Snapping is a fixed point, so re-running
         // it on an already-snapped span is a no-op.
         const span = item.end != null ? snapDisplaySpan(item.start, item.end) : null
-        // A behind-schedule item's displayed end is widened past its real end
-        // while the projection toggle is on (see widenedByItemId), so a
-        // drag on its right edge moves the WIDENED end, not the real one.
-        // Compensate by the same amount the item was widened by, so the real
-        // end shifts by exactly what the user dragged — write-back always
-        // targets the true stored end, never the projected one.
+        // A widened item's displayed start/end is pushed past its real
+        // start/end while the relevant toggle is on, so a drag on it moves
+        // the WIDENED edge(s), not the real one(s). Compensate by the same
+        // amount the item was widened by, so the real edge shifts by exactly
+        // what the user dragged — write-back always targets the true stored
+        // dates, never the widened ones. An item with an actual-overlay uses
+        // whichever of the two actual-overlay widen maps matches the live
+        // projection toggle (see the sync effect below for why there are
+        // two) — projection only ever widens the end, while actual-dates can
+        // widen either edge.
+        let realStart = span?.start ?? null
         let realEnd = span?.end ?? null
-        if (span && showProjectionRef.current) {
+        const actualWidenMap = showProjectionRef.current
+          ? widenedByActualAndProjectionIdRef.current
+          : widenedByActualIdRef.current
+        if (span && showActualDatesRef.current && actualWidenMap.has(itemId)) {
+          const widened = actualWidenMap.get(itemId)!
+          const baseStart = baseStartByItemIdRef.current.get(itemId)
+          const baseEnd = baseEndByItemIdRef.current.get(itemId)
+          if (baseStart && baseEnd) {
+            const startOverrunMs = baseStart.getTime() - widened.start.getTime()
+            const endOverrunMs = widened.end.getTime() - baseEnd.getTime()
+            realStart = new Date(span.start.getTime() + startOverrunMs)
+            realEnd = new Date(span.end.getTime() - endOverrunMs)
+          }
+        } else if (span && showProjectionRef.current) {
           const widenedEnd = widenedByItemIdRef.current.get(itemId)?.end
           const baseEnd = baseEndByItemIdRef.current.get(itemId)
           if (widenedEnd && baseEnd) {
@@ -399,7 +471,7 @@ export function LiveTimeline({
         // parses "YYYY-MM-DD HH:MM:SS" natively but not ISO 8601.
         const payload: ItemEditPayload = {
           [idCol]: rowId,
-          [startCol]: span ? formatSigmaDateTime(span.start) : null,
+          [startCol]: realStart ? formatSigmaDateTime(realStart) : null,
           [endCol]: realEnd ? formatSigmaDateTime(displayEndToDataEnd(realEnd)) : null,
         }
         // Lane reassignment: item.group is the lane the item was dropped onto.
@@ -601,27 +673,59 @@ export function LiveTimeline({
         groupsAttachedRef.current = hasGroups
       }
 
-      // A behind-schedule item's end (and, if it has a progress fill, its
-      // style) is widened to the projected date only while the toggle is on —
-      // see resolveProjection's doc comment. This is a genuine DataSet change
-      // (not pure CSS): it's what makes vis-timeline's own stacking treat the
-      // overrun as this item's real footprint, so it correctly bumps a
-      // colliding sibling out of the way.
-      const itemsToSync = showProjection
-        ? visibleItems.map((item) => {
-            const widened = widenedByItemId.get(String(item.id))
-            if (!widened) return item
-            return {
-              ...item,
-              end: widened.end,
-              ...(widened.style ? { style: widened.style } : {}),
-            }
-          })
-        : visibleItems
+      // A widened item's start/end (and style) is substituted only while the
+      // relevant toggle is on — see resolveProjection's and
+      // resolveActualOverlayWidening's doc comments. This is a genuine
+      // DataSet change (not pure CSS): it's what makes vis-timeline's own
+      // stacking treat the overrun as this item's real footprint, so it
+      // correctly bumps a colliding sibling out of the way. An item with an
+      // actual-overlay uses widenedByActualAndProjectionId (composing both
+      // signals into one box) when projection is ALSO on, so both render on
+      // the same bar at once; otherwise widenedByActualId (actual-overlay
+      // alone). An item with no actual-overlay is untouched by either map
+      // and falls through to the plain projection-only path, unchanged.
+      const itemsToSync =
+        showProjection || showActualDates
+          ? visibleItems.map((item) => {
+              const id = String(item.id)
+              if (showActualDates) {
+                const actualMap = showProjection
+                  ? widenedByActualAndProjectionId
+                  : widenedByActualId
+                const actualWidened = actualMap.get(id)
+                if (actualWidened) {
+                  return {
+                    ...item,
+                    start: actualWidened.start,
+                    end: actualWidened.end,
+                    style: actualWidened.style,
+                  }
+                }
+              }
+              if (!showProjection) return item
+              const widened = widenedByItemId.get(id)
+              if (!widened) return item
+              return {
+                ...item,
+                end: widened.end,
+                ...(widened.style ? { style: widened.style } : {}),
+              }
+            })
+          : visibleItems
       syncDataSet(itemsDs, itemsToSync, new Set(weekendIdsRef.current))
       syncWeekends()
     })
-  }, [visibleItems, widenedByItemId, visibleGroups, groups, syncWeekends, showProjection])
+  }, [
+    visibleItems,
+    widenedByItemId,
+    widenedByActualId,
+    widenedByActualAndProjectionId,
+    visibleGroups,
+    groups,
+    syncWeekends,
+    showProjection,
+    showActualDates,
+  ])
 
   const hasSource = Boolean(config?.[SOURCE])
   const missingCols = !config?.startDate || !config?.endDate
@@ -674,6 +778,12 @@ export function LiveTimeline({
               </button>
               {settingsOpen && (
                 <div className="timeline-settings-menu" role="menu">
+                  {/* Roadmap group first (Source A + its two overlay toggles),
+                      Source B (the read-only on-call schedule overlay — a
+                      different kind of thing entirely, not a roadmap signal)
+                      set apart below a divider, rather than interleaved
+                      between the projected-completion and actual-dates
+                      toggles where it used to sit. */}
                   <label className="timeline-settings-item">
                     <input
                       type="checkbox"
@@ -682,16 +792,6 @@ export function LiveTimeline({
                     />
                     Show {sourceALabel}
                   </label>
-                  {config?.sourceB && (
-                    <label className="timeline-settings-item">
-                      <input
-                        type="checkbox"
-                        checked={!hideSourceB}
-                        onChange={(e) => setHideSourceB(!e.target.checked)}
-                      />
-                      Show {sourceBLabel}
-                    </label>
-                  )}
                   {config?.projectedEndColumn && (
                     <label className="timeline-settings-item">
                       <input
@@ -701,6 +801,29 @@ export function LiveTimeline({
                       />
                       Show projected completion
                     </label>
+                  )}
+                  {config?.actualStartColumn && config?.projectedActualEndColumn && (
+                    <label className="timeline-settings-item">
+                      <input
+                        type="checkbox"
+                        checked={showActualDates}
+                        onChange={(e) => setShowActualDates(e.target.checked)}
+                      />
+                      Show actual dates
+                    </label>
+                  )}
+                  {config?.sourceB && (
+                    <>
+                      <div className="timeline-settings-divider" role="separator" />
+                      <label className="timeline-settings-item">
+                        <input
+                          type="checkbox"
+                          checked={!hideSourceB}
+                          onChange={(e) => setHideSourceB(!e.target.checked)}
+                        />
+                        Show {sourceBLabel}
+                      </label>
+                    </>
                   )}
                 </div>
               )}
@@ -728,7 +851,9 @@ export function LiveTimeline({
       </header>
       <div
         ref={containerRef}
-        className={`timeline-host${showProjection ? ' show-projection' : ''}`}
+        className={`timeline-host${showProjection ? ' show-projection' : ''}${
+          showActualDates ? ' show-actual-dates' : ''
+        }`}
       />
     </div>
   )

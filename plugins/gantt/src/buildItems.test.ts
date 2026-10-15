@@ -7,6 +7,8 @@ import {
   parseGroupId,
   parseProgress,
   pathToGroupId,
+  resolveActualOverlay,
+  resolveActualOverlayWidening,
   resolveProjection,
   safeId,
 } from './buildItems'
@@ -774,6 +776,7 @@ describe('resolveProjection', () => {
       style: '--projection-ratio: 62.5%;',
       displayEnd: new Date(2026, 4, 12),
       realRatio: 0.625,
+      projectedDisplayEnd: new Date(2026, 4, 12),
     })
   })
 
@@ -784,6 +787,7 @@ describe('resolveProjection', () => {
       kind: 'ahead',
       className: 'has-projection-ahead',
       style: '--projection-ratio: 40%;',
+      projectedDisplayEnd: new Date(2026, 4, 6),
     })
   })
 
@@ -821,7 +825,13 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     expect(result.items[0].end).toEqual(new Date(2026, 4, 9))
     expect(result.items[0].className).toBe('has-projection-behind')
     expect(result.items[0].style).toContain('--projection-ratio: 62.5%;')
-    expect(result.widenedByItemId.get('r1')).toEqual({ end: new Date(2026, 4, 12) })
+    // --planned-right (here 37.5% = 100% - 62.5% realRatio) pulls the main
+    // card back from the widened box's new right edge, leaving room for the
+    // overage strip above it — see App.css's has-projection-behind::before.
+    expect(result.widenedByItemId.get('r1')).toEqual({
+      end: new Date(2026, 4, 12),
+      style: '--projection-ratio: 62.5%; --planned-right: 37.5%;',
+    })
   })
 
   test('a row projected to finish early gets the ahead-of-schedule overlay, and no widened end', () => {
@@ -888,7 +898,7 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     expect(widened?.style).toContain('--projection-ratio: 62.5%;')
   })
 
-  test('widenedByItemId has no style override when the item has no progress value', () => {
+  test('widenedByItemId always carries --planned-right, even with no progress value to rescale', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -896,7 +906,9 @@ describe('buildItemsAndGroups projected-end overlay', () => {
       projected_col: ['2026-05-11'],
     }
     const result = buildItemsAndGroups(config, data)
-    expect(result.widenedByItemId.get('r1')?.style).toBeUndefined()
+    const style = result.widenedByItemId.get('r1')?.style
+    expect(style).toContain('--planned-right: 37.5%;')
+    expect(style).not.toContain('--progress:')
   })
 
   test('no projectedEndColumn configured: no overlay class/style and no widened end', () => {
@@ -924,6 +936,282 @@ describe('buildItemsAndGroups projected-end overlay', () => {
     const result = buildItemsAndGroups(config, data)
     expect(result.items[0].className).toBeUndefined()
     expect(result.widenedByItemId.size).toBe(0)
+  })
+})
+
+describe('resolveActualOverlay', () => {
+  test('both dates present: a span from the actual start through the day after the projected actual end', () => {
+    expect(resolveActualOverlay('2026-05-04', '2026-05-11')).toEqual({
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 12),
+    })
+  })
+
+  test('missing actual start: no overlay', () => {
+    expect(resolveActualOverlay(null, '2026-05-11')).toBeNull()
+    expect(resolveActualOverlay(undefined, '2026-05-11')).toBeNull()
+  })
+
+  test('missing projected actual end: no overlay', () => {
+    expect(resolveActualOverlay('2026-05-04', null)).toBeNull()
+    expect(resolveActualOverlay('2026-05-04', undefined)).toBeNull()
+  })
+
+  test('unparseable values: no overlay', () => {
+    expect(resolveActualOverlay('garbage', '2026-05-11')).toBeNull()
+    expect(resolveActualOverlay('2026-05-04', 'garbage')).toBeNull()
+  })
+
+  test('projected actual end before actual start: degenerate span, no overlay', () => {
+    expect(resolveActualOverlay('2026-05-11', '2026-05-04')).toBeNull()
+  })
+})
+
+describe('resolveActualOverlayWidening', () => {
+  // A 5-day display span: Mon May 4 -> Sat May 9, 2026 (= dayBoundDisplaySpan
+  // of raw dates May 4 -> May 8).
+  const span = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) }
+  // Well before every overlay used below, so --actual-elapsed-ratio clamps
+  // to 0% in every test that isn't specifically exercising it — keeps the
+  // planned-left/right/projection assertions focused on what they're
+  // actually testing. Elapsed-ratio clamping itself is covered separately.
+  const past = new Date(2000, 0, 1)
+
+  test('actual start earlier and projected actual end later: widens both edges, with insets for the real planned portion', () => {
+    // Overlay: Mon Apr 27 -> display end Wed May 13 (raw May 12 + 1).
+    // Widened box: Apr 27 -> May 13 (16 days). Planned (May 4 -> May 9) sits
+    // 7 days in from the left (43.75%) and 4 days short of the right (25%).
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined, past)
+    expect(widened.start).toEqual(overlay.start)
+    expect(widened.end).toEqual(overlay.end)
+    expect(widened.style).toContain('--planned-left: 43.75%;')
+    expect(widened.style).toContain('--planned-right: 25%;')
+    // The actual strip itself spans the whole widened box here (overlay IS
+    // what defines startMs/endMs), so its own insets are 0.
+    expect(widened.style).toContain('--actual-left: 0%;')
+    expect(widened.style).toContain('--actual-right: 0%;')
+  })
+
+  test('overlay fully inside the planned span: widened box equals the planned span, actual strip insets reflect where it sits', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined, past)
+    expect(widened.start).toEqual(span.start)
+    expect(widened.end).toEqual(span.end)
+    expect(widened.style).toBe(
+      '--planned-left: 0%; --planned-right: 0%; --actual-left: 20%; --actual-right: 20%; --actual-elapsed-ratio: 0%;',
+    )
+  })
+
+  test('appends to an existing base style rather than replacing it', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(
+      span,
+      overlay,
+      null,
+      null,
+      '--item-color: #f00;',
+      past,
+    )
+    expect(widened.style).toBe(
+      '--item-color: #f00; --planned-left: 0%; --planned-right: 0%; --actual-left: 20%; --actual-right: 20%; --actual-elapsed-ratio: 0%;',
+    )
+  })
+
+  test('a progress value computes --progress-point as an absolute percentage of the widened box', () => {
+    // Overlay widens left by 7 days and right by 4 days (same as the first
+    // test above): planned sits at 43.75%-75% of the 16-day union box.
+    // 50% progress through the planned portion (31.25 points wide) lands at
+    // 43.75 + 0.5*31.25 = 59.375%.
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, 50, undefined, past)
+    expect(widened.style).toContain('--progress-point: 59.375%;')
+  })
+
+  test('no progress value: no --progress-point in the style', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(span, overlay, null, null, undefined, past)
+    expect(widened.style).not.toContain('--progress-point')
+  })
+
+  test('composes a behind-schedule projection into the same union box, recomputing its ratio and adding a right-inset for the overrun stripe', () => {
+    // Projected completion: last day Mon May 18 -> display end Tue May 19
+    // (further right than the actual-overlay's own May 13 end).
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const projection = resolveProjection(span, '2026-05-18')
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined, past)
+    // Union: Apr 27 -> May 19 (22 days). Planned (May 4 -> May 9) sits 7
+    // days in (31.818...%) and 10 days short of the right (45.454...%).
+    expect(widened.start).toEqual(new Date(2026, 3, 27))
+    expect(widened.end).toEqual(new Date(2026, 4, 19))
+    expect(widened.style).toContain('--planned-left: 31.818181818181817%;')
+    expect(widened.style).toContain('--planned-right: 45.45454545454545%;')
+    // --projection-ratio marks the real end (May 9) within the union box;
+    // --projection-end-right insets the stripe back from the union's right
+    // edge (May 19) to the projected end (also May 19 here) -- 0%, since
+    // the projection IS what pushed the union that far right.
+    expect(widened.style).toContain('--projection-ratio: 54.54545454545454%;')
+    expect(widened.style).toContain('--projection-end-right: 0%;')
+  })
+
+  test('composes an ahead-of-schedule projection, recomputing its ratio relative to the union box', () => {
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const projection = resolveProjection(span, '2026-05-05') // ahead: display end May 6
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined, past)
+    // Union stays Apr 27 -> May 13 (16 days) -- the ahead projection (May 6)
+    // never extends past what the actual-overlay already covers.
+    expect(widened.end).toEqual(new Date(2026, 4, 13))
+    // May 6 is 9 days after the union start (Apr 27), i.e. 9/16 = 56.25%.
+    expect(widened.style).toContain('--projection-ratio: 56.25%;')
+    expect(widened.style).not.toContain('--projection-end-right')
+  })
+
+  test('actual-overlay extends further right than the projected end: the overrun stripe stops short of the union edge', () => {
+    // Projected completion ends well before the actual-overlay's own end.
+    const overlay = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 20) } // ends May 20
+    const projection = resolveProjection(span, '2026-05-11') // behind: display end May 12
+    const widened = resolveActualOverlayWidening(span, overlay, projection, null, undefined, past)
+    // Union: May 4 -> May 20 (16 days). Real end (May 9) is 5 days in = 31.25%.
+    expect(widened.end).toEqual(new Date(2026, 4, 20))
+    expect(widened.style).toContain('--projection-ratio: 31.25%;')
+    // Projected end (May 12) is 8 days short of the union's right edge
+    // (May 20) out of 16 total = 50%.
+    expect(widened.style).toContain('--projection-end-right: 50%;')
+  })
+
+  describe('--actual-elapsed-ratio', () => {
+    // A plain 4-day overlay, no widening beyond the planned span, to keep
+    // the elapsed-ratio math isolated from the union-box insets above.
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 9) }
+
+    test('now before the overlay start: clamped to 0%, nothing elapsed yet', () => {
+      const widened = resolveActualOverlayWidening(
+        span,
+        overlay,
+        null,
+        null,
+        undefined,
+        new Date(2026, 4, 1),
+      )
+      expect(widened.style).toContain('--actual-elapsed-ratio: 0%;')
+    })
+
+    test('now after the overlay end: clamped to 100%, fully elapsed', () => {
+      const widened = resolveActualOverlayWidening(
+        span,
+        overlay,
+        null,
+        null,
+        undefined,
+        new Date(2026, 4, 30),
+      )
+      expect(widened.style).toContain('--actual-elapsed-ratio: 100%;')
+    })
+
+    test('now partway through the overlay: a fraction of the strip, not the outer box', () => {
+      // 1 day into a 4-day overlay = 25%, regardless of how much wider the
+      // outer (widened) box might otherwise be.
+      const widened = resolveActualOverlayWidening(
+        span,
+        overlay,
+        null,
+        null,
+        undefined,
+        new Date(2026, 4, 6),
+      )
+      expect(widened.style).toContain('--actual-elapsed-ratio: 25%;')
+    })
+  })
+})
+
+describe('buildItemsAndGroups actual-dates overlay', () => {
+  const config = {
+    startDate: 'start_col',
+    endDate: 'end_col',
+    idColumn: 'id_col',
+    actualStartColumn: 'actual_start_col',
+    projectedActualEndColumn: 'projected_actual_end_col',
+  }
+
+  test('both columns configured and present: has-actual-overlay class, no extra item, and a widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: ['2026-05-05'],
+      projected_actual_end_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups(config, data)
+    // No separate DataItem — see resolveActualOverlay's doc comment for why
+    // a second type:'background' item couldn't reliably track its own row.
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({
+      id: 'r1',
+      className: 'has-actual-overlay',
+      // The main item's own start/end are untouched (unwidened) — widening
+      // is applied by the caller (LiveTimeline), conditionally on the toggle.
+      start: new Date(2026, 4, 4),
+      end: new Date(2026, 4, 9),
+    })
+    const widened = result.widenedByActualId.get('r1')
+    expect(widened?.start).toEqual(new Date(2026, 4, 4)) // actual start (May 5) is after planned start, so unchanged
+    expect(widened?.end).toEqual(new Date(2026, 4, 12)) // projected actual end (May 11) display end
+  })
+
+  test('only one of the two columns configured: no overlay class and no widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: ['2026-05-05'],
+    }
+    const result = buildItemsAndGroups(
+      { ...config, projectedActualEndColumn: undefined },
+      data,
+    )
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
+  })
+
+  test('neither column configured: no overlay class and no widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+    }
+    const result = buildItemsAndGroups(
+      { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' },
+      data,
+    )
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
+  })
+
+  test('columns configured but the row has no actual-date values: no overlay class and no widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      actual_start_col: [null],
+      projected_actual_end_col: [null],
+    }
+    const result = buildItemsAndGroups(config, data)
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
+  })
+
+  test('multi-group row: each leaf item gets its own widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      group_col: ['Alice'],
+      actual_start_col: ['2026-05-05'],
+      projected_actual_end_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups({ ...config, group: 'group_col' }, data)
+    const item = result.items[0]
+    expect(result.widenedByActualId.has(String(item.id))).toBe(true)
   })
 })
 

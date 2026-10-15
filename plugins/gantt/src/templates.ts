@@ -6,8 +6,8 @@ export function renderItemContent(
   item: TimelineItem,
   visualsByItemId: Map<string, ItemVisual>,
 ): HTMLElement | string {
+  const visual = visualsByItemId.get(String(item.id))
   const id = String(item.id)
-  const visual = visualsByItemId.get(id)
   const text = typeof item.content === 'string' ? item.content : ''
   if (!visual) return text
 

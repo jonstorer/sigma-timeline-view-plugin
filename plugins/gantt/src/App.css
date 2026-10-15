@@ -105,6 +105,16 @@
   border-radius: 4px;
 }
 
+/* Separates the roadmap toggles (Source A + its two overlay checkboxes)
+   from Source B (the read-only on-call schedule overlay) below it — a
+   different kind of thing from the roadmap signals above, not another
+   roadmap toggle. */
+.timeline-settings-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 2px 0;
+}
+
 .timeline-settings-item:hover {
   background: #f3f4f6;
 }
@@ -332,7 +342,13 @@
 .timeline-host .vis-item.vis-range {
   background: #ffffff;
   border: none;
-  border-radius: 10px;
+  /* Square corners, not rounded: a projection or actual-dates strip can
+     extend past the planned bar's own edges, and a gradient/pseudo-element
+     can't do PARTIAL rounding (round the box's true far ends but not the
+     seam where a strip meets the card) — rounding looked inconsistent
+     wherever that happened, so every bar/strip in this family is square
+     instead of trying to round some edges and not others. */
+  border-radius: 0;
   color: #1f2937;
   min-height: 26px;
   box-shadow:
@@ -373,54 +389,225 @@
   cursor: default;
 }
 .timeline-host .vis-item.vis-range .vis-item-content {
-  padding: 4px 10px 4px 12px;
+  /* Pushed down by --top-strip-space (see below) so the label always sits in
+     the planned bar's own 26px band, not centered across the item's full
+     (possibly taller) height. Inset left/right by --planned-left/
+     --planned-right (defaulting to 0%, i.e. plain 12px/10px padding, for any
+     item that isn't widened) so the label stays over the solid planned card
+     instead of spilling into the transparent overhang — e.g. when an actual
+     start earlier than the planned start pushes --planned-left above 0%,
+     12px of fixed padding alone would start the text to the LEFT of the
+     card's own visible edge, floating over the translucent/empty region
+     with nothing solid behind it. */
+  padding: calc(4px + var(--top-strip-space, 0px)) calc(10px + var(--planned-right, 0%)) 4px
+    calc(12px + var(--planned-left, 0%));
   line-height: 18px;
 }
 .timeline-host .vis-item.vis-range .vis-item-overflow {
   overflow: hidden;
 }
 
-/* Projected-completion overlay — one mechanism for both directions now (see
-   resolveProjection's doc comment in buildItems.ts for why): a
-   `--projection-ratio` custom property (a percentage of the item's own
-   rendered width, so it scales at any zoom level) plus a has-projection-*
-   class, gated behind the `show-projection` class the header checkbox adds to
-   `.timeline-host`. Purely decorative — never intercepts a click/hover meant
-   for the real item.
+/* Actual-dates overlay + projected-completion overlay: a "sandwich" layout.
+   The planned bar keeps its own real width and 26px height (identical to a
+   plain item), with a small strip ABOVE it for the planned-side projection
+   (overage when behind schedule, "time saved" when ahead — see the
+   has-projection-*::before rules below) and a small strip BELOW it for the
+   actual-dates span (see has-actual-overlay::after below) — rather than
+   composing every signal onto the planned bar's own line.
 
-   AHEAD (projected earlier than stored end): the item's own width is
-   unchanged, and the marker sits inside it at the projected date.
-   BEHIND (projected later): LiveTimeline widens the item's actual rendered
-   `end` to the projected date while the toggle is on, so vis-timeline's own
-   stacking treats the overrun as this item's real footprint (bumping a
-   colliding sibling for free, no custom packing needed) — `--projection-ratio`
-   then marks where the real end falls *within* that widened box, and
-   everything past it is shaded as the overrun. */
-.timeline-host .vis-item.vis-range.has-projection-ahead::after,
-.timeline-host .vis-item.vis-range.has-projection-behind::after {
+   This is the third design (see resolveActualOverlayWidening's doc comment
+   in buildItems.ts for the full history: a group-scoped background item,
+   then a DOM wrapper broken by vis-timeline's sticky-label transform, then a
+   single composed line that worked but couldn't show both the planned-side
+   and actual-side projections at once without one crowding the other).
+
+   The item's own DataItem box is still widened to the union of every date
+   this item needs to show, same trick as the composed design before it —
+   it's what makes vis-timeline's own stacking treat the full sandwich
+   (strips included) as this item's real footprint. --planned-left/
+   --planned-right and --actual-left/--actual-right each place their own
+   piece within that shared box independently, rather than needing to be
+   reconciled onto one line. */
+.timeline-host .vis-item.vis-range.has-projection-ahead,
+.timeline-host .vis-item.vis-range.has-projection-behind,
+.timeline-host .vis-item.vis-range.has-actual-overlay {
+  background-color: transparent;
+  box-shadow: none;
+}
+/* Each strip adds its own 8px (6px strip + 2px gap) to the item's min-
+   height, via a custom property rather than two directly-conflicting
+   min-height rules, so an item with both a projection AND an actual-overlay
+   gets BOTH strips' worth of extra height, not just whichever rule happened
+   to win the cascade.
+
+   Deliberately NOT gated behind show-projection/show-actual-dates (unlike
+   the strip's own display:block below, and unlike the single-line design
+   this replaced): the row's height stays constant whether the checkbox is
+   on or off, so toggling it doesn't reflow neighboring rows in and out of
+   vis-timeline's stacking — only the strip's own content disappears, into
+   space that's already reserved. */
+.timeline-host .vis-item.vis-range.has-projection-ahead,
+.timeline-host .vis-item.vis-range.has-projection-behind {
+  --top-strip-space: 8px;
+}
+.timeline-host .vis-item.vis-range.has-actual-overlay {
+  --bottom-strip-space: 8px;
+}
+.timeline-host .vis-item.vis-range {
+  min-height: calc(26px + var(--top-strip-space, 0px) + var(--bottom-strip-space, 0px));
+}
+
+/* The planned "card": same left-accent + white/tinted-fill look as a plain
+   item, confined to --planned-left/--planned-right horizontally (0%/0%,
+   i.e. the item's own full width, whenever nothing widens it) and to a 26px
+   band vertically via background-size + background-position, offset down by
+   --top-strip-space so it sits directly under the overage/saved strip
+   instead of centered in the item's full height. Also not gated behind the
+   toggle classes, for the same reason as the strip-space custom properties
+   above — the card stays put in its own band even while a strip's content is
+   hidden, rather than re-centering into the (still reserved) empty space. */
+.timeline-host .vis-item.vis-range.has-projection-ahead,
+.timeline-host .vis-item.vis-range.has-projection-behind,
+.timeline-host .vis-item.vis-range.has-actual-overlay {
+  background-repeat: no-repeat;
+  background-size: 100% 26px;
+  background-position: 0 var(--top-strip-space, 0px);
+  background-image:
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      var(--item-color, #6b7280) var(--planned-left, 0%),
+      var(--item-color, #6b7280) calc(var(--planned-left, 0%) + 4px),
+      transparent calc(var(--planned-left, 0%) + 4px)
+    ),
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #ffffff var(--planned-left, 0%),
+      #ffffff calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    );
+}
+/* Progress fill: same two layers, but the white layer's left portion is
+   tinted instead of white, up to whichever of these is actually set (in
+   this priority order):
+     1. --progress-point — an ABSOLUTE percentage of the widened box, set by
+        resolveActualOverlayWidening whenever actual-overlay widening ran.
+     2. --progress — already rescaled to this box by buildItems.ts whenever
+        plain projection widening (no actual-overlay) ran; numerically
+        equivalent to what --progress-point would be here, since
+        --planned-left is always 0% on this path (projection only ever
+        widens the right edge).
+     3. 0% — belt and suspenders; shouldn't be reachable since `has-progress`
+        implies one of the above is set, but an empty fill beats a wrong one.
+   Falling back through --progress-point THEN --progress (instead of
+   defaulting straight to --planned-left) is exactly the bug class fixed
+   earlier on this branch: a fallback that resolves to 0% whenever
+   --progress-point isn't set would silently zero the fill on the plain-
+   projection path, where it never is. */
+.timeline-host .vis-item.vis-range.has-projection-ahead.has-progress,
+.timeline-host .vis-item.vis-range.has-projection-behind.has-progress,
+.timeline-host .vis-item.vis-range.has-actual-overlay.has-progress {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      var(--item-color, #6b7280) var(--planned-left, 0%),
+      var(--item-color, #6b7280) calc(var(--planned-left, 0%) + 4px),
+      transparent calc(var(--planned-left, 0%) + 4px)
+    ),
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff)
+        var(--planned-left, 0%),
+      color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff)
+        var(--progress-point, var(--progress, 0%)),
+      #ffffff var(--progress-point, var(--progress, 0%)),
+      #ffffff calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    );
+}
+
+/* Top strip: the planned-side projection, directly above the planned bar —
+   one mechanism for both directions (see resolveProjection's doc comment in
+   buildItems.ts for why), gated behind the `show-projection` class the
+   settings-menu checkbox adds to `.timeline-host`. Purely decorative — never
+   intercepts a click/hover meant for the real item.
+
+   BEHIND (projected later than the real end): a red hatch from the real end
+   to the projected end — the overage. Reuses the same --projection-ratio
+   (left bound) and --projection-end-right (right bound, default 0% i.e. the
+   box's own right edge) the earlier composed design used for its inline
+   marker — see resolveActualOverlayWidening's doc comment for why composing
+   with an actual-overlay needs no new JS for this strip.
+   AHEAD (projected earlier): a hollow dashed green strip from the projected
+   end back to the real end — the portion of the plan that won't be needed.
+   Same --projection-ratio as the left bound; the right bound is
+   --planned-right (default 0%, i.e. the box's own right edge), since ahead
+   never widens the box past the real end on its own — only an actual-
+   overlay composed alongside it would push that edge further out. */
+.timeline-host .vis-item.vis-range.has-projection-ahead::before,
+.timeline-host .vis-item.vis-range.has-projection-behind::before {
   content: '';
   position: absolute;
   top: 0;
-  bottom: 0;
+  height: 6px;
+  box-sizing: border-box;
   display: none;
   pointer-events: none;
 }
-.timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::after {
-  display: block;
-  left: var(--projection-ratio, 0%);
-  width: 2px;
-  background: #16a34a;
-}
-.timeline-host.show-projection .vis-item.vis-range.has-projection-behind::after {
+.timeline-host.show-projection .vis-item.vis-range.has-projection-ahead::before {
   display: block;
   left: var(--projection-ratio, 100%);
-  right: 0;
+  right: var(--planned-right, 0%);
+  border: 1px dashed rgba(22, 163, 74, 0.55);
+  background: rgba(22, 163, 74, 0.1);
+}
+.timeline-host.show-projection .vis-item.vis-range.has-projection-behind::before {
+  display: block;
+  left: var(--projection-ratio, 100%);
+  right: var(--projection-end-right, 0%);
   background-image: repeating-linear-gradient(
     45deg,
     rgba(220, 38, 38, 0.35) 0 4px,
     rgba(220, 38, 38, 0.15) 4px 8px
   );
-  border-radius: 0 10px 10px 0;
+}
+
+/* Bottom strip: the actual-dates span, directly below the planned bar,
+   gated behind `show-actual-dates`. Solid amber from its own start up to
+   "now" (--actual-elapsed-ratio — a % of the STRIP's OWN width, not this
+   outer box, computed in resolveActualOverlayWidening), hatched for the
+   projected remainder beyond that. There's no separate "actual progress"
+   column — actual start is the only real data point on this side — so
+   elapsed-so-far is the closest available stand-in for progress, mirroring
+   the planned bar's fill. */
+.timeline-host .vis-item.vis-range.has-actual-overlay::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  height: 6px;
+  box-sizing: border-box;
+  display: none;
+  pointer-events: none;
+  border: 1px dashed rgba(245, 158, 11, 0.6);
+}
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay::after {
+  display: block;
+  left: var(--actual-left, 0%);
+  right: var(--actual-right, 0%);
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(245, 158, 11, 0.55) 0 var(--actual-elapsed-ratio, 100%),
+      transparent var(--actual-elapsed-ratio, 100%)
+    ),
+    repeating-linear-gradient(
+      45deg,
+      rgba(245, 158, 11, 0.45) 0 4px,
+      rgba(245, 158, 11, 0.18) 4px 8px
+    );
 }
 
 /* Drag handles */

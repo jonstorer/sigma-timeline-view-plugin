@@ -150,4 +150,27 @@ describe('renderItemContent', () => {
     const out = renderItemContent(item as TimelineItem, visuals)
     expect(out).toBeInstanceOf(HTMLElement)
   })
+
+  test('has-actual-overlay class on the item has no effect on rendered content', () => {
+    // The actual-dates overlay is painted entirely via CSS background-image
+    // layers on the outer box (see App.css) — see buildItems.ts's
+    // resolveActualOverlayWidening doc comment for why a DOM content wrapper
+    // doesn't work here (vis-timeline's sticky-label content transform).
+    // renderItemContent doesn't need to know about has-actual-overlay at all.
+    const visuals = new Map<string, ItemVisual>([
+      ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
+    ])
+    const item = {
+      id: 'x',
+      content: 'Task',
+      start: new Date(),
+      className: 'has-projection-behind has-actual-overlay',
+    } as TimelineItem
+    const out = renderItemContent(item, visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    const wrapper = out as HTMLElement
+    expect(wrapper.className).toBe('ts-item-wrapper')
+    expect(wrapper.querySelector('.ts-pill')?.textContent).toBe('P0')
+    expect(wrapper.querySelector('a.ts-item-link')).not.toBeNull()
+  })
 })
