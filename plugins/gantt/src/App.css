@@ -259,15 +259,28 @@
    a second, independent span rather than a full-height wash like the weekend
    bands above — wherever actual dates diverge from planned, it pokes out past
    the solid bar's edges, showing slippage directly.
-   top/height use !important because vis-timeline sets a grouped background
-   item's box to the full row height inline on every redraw (see
-   BackgroundItem's positioning in vis-timeline's source) — there's no public
-   option to shrink it, only CSS can override the inline style. Percentages
-   (not a fixed px height) so this still centers correctly however tall the
-   row ends up (e.g. a row with stacked source-B items is taller). */
+   The visible band is a `::before`, not styling on the box itself: vis-
+   timeline sets a grouped background item's box to the exact per-row pixel
+   height inline on every redraw (correct), but that box isn't itself a CSS
+   positioning context with a reliably-scoped height for percentages to
+   resolve against — a `top`/`height` percentage on the box directly was
+   found to resolve against a much taller ancestor (looked like one giant
+   band spanning every row). The box (absolutely positioned via the base
+   `.vis-item` rule) IS a valid containing block for its own `::before`
+   child, so percentages on *that* correctly resolve against the box's own
+   (correctly per-row-sized) dimensions instead. */
 .timeline-host .vis-item.vis-background.ts-actual-overlay {
-  top: 15% !important;
-  height: 70% !important;
+  background-color: transparent;
+  border: none;
+}
+.timeline-host .vis-item.vis-background.ts-actual-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 70%;
+  transform: translateY(-50%);
   background-color: rgba(245, 158, 11, 0.18);
   border: 1px dashed rgba(245, 158, 11, 0.5);
   border-radius: 10px;
