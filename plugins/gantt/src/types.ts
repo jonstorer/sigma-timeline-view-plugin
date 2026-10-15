@@ -79,6 +79,21 @@ export interface WidenedProjection {
   style?: string
 }
 
+export interface WidenedActualOverlay {
+  /** Widened start/end to substitute for the item's real start/end while the
+   * actual-dates toggle is on — same "widen the rendered box" trick as
+   * `WidenedProjection`, so vis-timeline's own stacking treats the overhang
+   * (on *either* edge — unlike projection, the actual start can be earlier
+   * than the planned start) as part of this item's own footprint. */
+  start: Date
+  end: Date
+  /** The item's base style with `--planned-left`/`--planned-right` appended
+   * — where the real planned bar sits within this widened box, as a
+   * percentage of the box's own width. Consumed by `.ts-planned-inset` in
+   * App.css (see templates.ts for the wrapper it applies to). */
+  style: string
+}
+
 export interface BuildResult {
   /** Items with their real (unwidened) start/end. */
   items: DataItem[]
@@ -90,6 +105,13 @@ export interface BuildResult {
    * drag write-back math so editing a widened bar still targets the item's
    * real stored end. */
   widenedByItemId: Map<string, WidenedProjection>
+  /** Item id → what to substitute while the actual-dates toggle is on — see
+   * `WidenedActualOverlay`. Independent of `widenedByItemId`: when both a
+   * projection and an actual-overlay apply to the same item and both
+   * toggles are on, the actual-overlay takes priority for that item (see
+   * LiveTimeline's sync effect) rather than attempting to compose two
+   * independently-computed ratio systems in one box. */
+  widenedByActualId: Map<string, WidenedActualOverlay>
   groups: DataGroup[]
   visuals: Map<string, ItemVisual>
   rowIdByItemId: Map<string, unknown>

@@ -7,6 +7,7 @@ import type {
   ItemVisual,
   ParsedGroupCell,
   TimelineConfig,
+  WidenedActualOverlay,
   WidenedProjection,
 } from './types'
 
@@ -204,11 +205,23 @@ export function resolveProjection(
  * Resolve the "actual dates" overlay span for a row — Actual Start Date →
  * Projected Actual End Date, entirely independent of the planned span and
  * `resolveProjection` above (see that function's doc comment: this is a
- * second, optional pair of columns, not a replacement). Rendered as a
- * translucent band behind the planned bar (see LiveTimeline/App.css's
- * `ts-actual-overlay`), so unlike resolveProjection there's no "ahead"/
- * "behind" branching — it's just a span, and both columns must resolve for
- * it to render at all (half the data isn't enough to place a span).
+ * second, optional pair of columns, not a replacement). Both columns must
+ * resolve for it to render at all (half the data isn't enough to place a
+ * span).
+ *
+ * This used to be rendered as a separate `type:'background'` DataItem
+ * scoped to the row's `group`. That broke down the moment a lane held more
+ * than one stacked item (the normal case): vis-timeline can only scope a
+ * background item to a *group*, not to whichever row its own dynamic
+ * stacking placed a specific item on, so every item sharing a lane rendered
+ * its overlay at the exact same (wrong) spot, anchored to the group's own
+ * top — confirmed live (every lane showed one band pinned to the top,
+ * jittering on scroll as the group's bounds were recomputed).
+ *
+ * Fixed by not using a second DataItem at all: see `resolveActualOverlayWidening`
+ * below, which widens the *main* item's own box (same trick as
+ * `resolveProjection`'s "behind" case) so the overlay always follows
+ * whatever row vis-timeline stacks that item into.
  */
 export function resolveActualOverlay(
   rawActualStart: unknown,
@@ -222,12 +235,35 @@ export function resolveActualOverlay(
   return { start, end }
 }
 
-const ACTUAL_OVERLAY_SUFFIX = '::actual'
-
-/** Identify a synthetic actual-dates overlay item pushed alongside its main
- * item by `resolveActualOverlay` — see that function's doc comment. */
-export function isActualOverlayItemId(id: unknown): boolean {
-  return typeof id === 'string' && id.endsWith(ACTUAL_OVERLAY_SUFFIX)
+/**
+ * Widen an item's own box to the union of its planned span and its actual-
+ * overlay span, plus a style carrying where the real planned bar sits within
+ * that widened box (`--planned-left`/`--planned-right`, percentages of the
+ * widened box's own width). `.ts-planned-inset` (App.css) uses these to
+ * render the real "solid card" look inset within the wider, translucent
+ * outer box — see `templates.ts`'s `renderItemContent` for the wrapper this
+ * pairs with.
+ *
+ * Unlike `resolveProjection`, this can widen *either* edge (an actual start
+ * earlier than planned is exactly the "ahead" case this feature exists to
+ * surface), so the inset has two independent insets rather than one ratio.
+ */
+export function resolveActualOverlayWidening(
+  span: { start: Date; end: Date },
+  overlay: { start: Date; end: Date },
+  baseStyle: string | undefined,
+): WidenedActualOverlay {
+  const start = overlay.start.getTime() < span.start.getTime() ? overlay.start : span.start
+  const end = overlay.end.getTime() > span.end.getTime() ? overlay.end : span.end
+  const totalMs = end.getTime() - start.getTime()
+  const plannedLeft = ((span.start.getTime() - start.getTime()) / totalMs) * 100
+  const plannedRight = ((end.getTime() - span.end.getTime()) / totalMs) * 100
+  const insetStyle = `--planned-left: ${plannedLeft}%; --planned-right: ${plannedRight}%;`
+  return {
+    start,
+    end,
+    style: baseStyle ? `${baseStyle} ${insetStyle}` : insetStyle,
+  }
 }
 
 export function buildPathsForRow(parsed: ParsedGroupCell[]): GroupPath[] {
@@ -282,6 +318,7 @@ export function buildItemsAndGroups(
   const empty = (): BuildResult => ({
     items: [],
     widenedByItemId: new Map(),
+    widenedByActualId: new Map(),
     groups: [],
     visuals,
     rowIdByItemId,
@@ -331,6 +368,7 @@ export function buildItemsAndGroups(
   const rowCount = starts.length
   const items: DataItem[] = []
   const widenedByItemId = new Map<string, WidenedProjection>()
+  const widenedByActualId = new Map<string, WidenedActualOverlay>()
   const groupTree = new Map<string, GroupNode>()
 
   const registerPath = (path: GroupPath) => {
@@ -368,6 +406,10 @@ export function buildItemsAndGroups(
     const projection = projectedEndCol
       ? resolveProjection(span, projectedEnds[i])
       : null
+    const actualOverlay =
+      actualStartCol && projectedActualEndCol
+        ? resolveActualOverlay(actualStarts[i], projectedActualEnds[i])
+        : null
     // The item look is CSS-driven (see App.css). Hand the highlight color and
     // progress to the stylesheet as custom properties; `has-progress` gates the
     // progress fill so bars without a value stay solid.
@@ -382,16 +424,13 @@ export function buildItemsAndGroups(
     const classNames = [
       pct != null ? 'has-progress' : null,
       projection?.className ?? null,
+      actualOverlay ? 'has-actual-overlay' : null,
     ].filter((c): c is string => c != null)
     const className = classNames.length > 0 ? classNames.join(' ') : undefined
     const pill = pillCol ? String(pills[i] ?? '').trim() : ''
     const pillColor = pillColorCol ? String(pillColors[i] ?? '').trim() : ''
     const linkUrl = linkCol ? String(links[i] ?? '').trim() : ''
     const description = descCol ? String(descriptions[i] ?? '').trim() : ''
-    const actualOverlay =
-      actualStartCol && projectedActualEndCol
-        ? resolveActualOverlay(actualStarts[i], projectedActualEnds[i])
-        : null
 
     const pushItem = (itemId: string, group?: string) => {
       if (pill || pillColor || linkUrl || description) {
@@ -414,14 +453,10 @@ export function buildItemsAndGroups(
         ...(className ? { className } : {}),
       })
       if (actualOverlay) {
-        items.push({
-          id: `${itemId}${ACTUAL_OVERLAY_SUFFIX}`,
-          ...(group ? { group } : {}),
-          type: 'background',
-          start: actualOverlay.start,
-          end: actualOverlay.end,
-          className: 'ts-actual-overlay',
-        })
+        widenedByActualId.set(
+          itemId,
+          resolveActualOverlayWidening(span, actualOverlay, style),
+        )
       }
       // The caller substitutes this for the item's real end/style while the
       // projection toggle is on — see `resolveProjection`'s doc comment for
@@ -497,6 +532,7 @@ export function buildItemsAndGroups(
   return {
     items,
     widenedByItemId,
+    widenedByActualId,
     groups,
     visuals,
     rowIdByItemId,

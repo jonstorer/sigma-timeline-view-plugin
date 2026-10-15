@@ -314,7 +314,11 @@ describe('LiveTimeline actual-dates toggle', () => {
     expect(getByLabelText(/show actual dates/i)).not.toBeChecked()
   })
 
-  test('toggling adds/removes the overlay item from the DataSet, independent of the projection toggle', () => {
+  test('toggling widens/unwidens the item\'s own box in the DataSet, independent of the projection toggle', () => {
+    // Unlike the old separate-DataItem design, the overlay is the SAME item
+    // id ('r1'), widened — see resolveActualOverlayWidening's doc comment
+    // for why a second DataItem couldn't reliably track the main item's own
+    // (dynamically stacked) row.
     const { getByLabelText } = render(
       <LiveTimeline
         config={{ ...actualDatesConfig, projectedEndColumn: 'projected_col' }}
@@ -330,33 +334,38 @@ describe('LiveTimeline actual-dates toggle', () => {
     fireEvent.click(actualCheckbox)
     expect(actualCheckbox).toBeChecked()
     expect(projectionCheckbox).not.toBeChecked()
+    // actual_start_col (May 2) is after the planned start (May 1), so the
+    // start is unchanged; projected_actual_end_col (May 11) widens the end
+    // to its display end (May 12).
     expect(addSpy).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ id: 'r1::actual' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
+      ]),
     )
     addSpy.mockRestore()
 
-    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
+    const secondAddSpy = vi.spyOn(DataSet.prototype, 'add')
     fireEvent.click(actualCheckbox)
     expect(actualCheckbox).not.toBeChecked()
-    expect(removeSpy).toHaveBeenCalledWith(
-      expect.arrayContaining(['r1::actual']),
+    expect(secondAddSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
+      ]),
     )
-    removeSpy.mockRestore()
+    secondAddSpy.mockRestore()
   })
 
-  test('hiding Source A also hides the overlay even when the toggle is on', () => {
+  test('hiding Source A also removes the item (and its overlay styling) from the DataSet', () => {
     const { getByLabelText } = render(
       <LiveTimeline config={actualDatesConfig} data={actualDatesData} />,
     )
     fireEvent.click(getByLabelText(/display settings/i))
     fireEvent.click(getByLabelText(/show actual dates/i))
 
-    const addSpy = vi.spyOn(DataSet.prototype, 'add')
+    const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
     fireEvent.click(getByLabelText(/show source a/i))
-    expect(addSpy).not.toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ id: 'r1::actual' })]),
-    )
-    addSpy.mockRestore()
+    expect(removeSpy).toHaveBeenCalledWith(expect.arrayContaining(['r1']))
+    removeSpy.mockRestore()
   })
 })
 
@@ -676,6 +685,51 @@ describe('LiveTimeline drag editing', () => {
     expect(onItemEdit).toHaveBeenCalledWith({
       id_col: 'r1',
       start_col: '2026-05-04 00:00:00',
+      end_col: '2026-05-15 00:00:00',
+    })
+  })
+
+  test('onMove compensates a widened (actual-dates) drag on both edges so write-back targets the real planned dates', () => {
+    // Base span: Mon May 4 -> Sat May 9 (display). Actual start Mon Apr 27
+    // (7 days earlier) and projected actual end Fri May 15 -> display end
+    // Sat May 16 (7 days later) -- both edges widen by 7 days.
+    const onItemEdit = vi.fn()
+    const { getByLabelText } = render(
+      <LiveTimeline
+        config={{
+          ...oneRowConfig,
+          actualStartColumn: 'actual_start_col',
+          projectedActualEndColumn: 'projected_actual_end_col',
+        }}
+        data={{
+          ...oneRowData,
+          start_col: ['2026-05-04'],
+          end_col: ['2026-05-08'],
+          actual_start_col: ['2026-04-27'],
+          projected_actual_end_col: ['2026-05-15'],
+        }}
+        onItemEdit={onItemEdit}
+      />,
+    )
+    // Turn the toggle on so the item is actually rendered widened — the
+    // compensation only applies while showActualDates is true.
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show actual dates/i))
+
+    const callback = vi.fn()
+    // Simulate a body drag shifting the whole widened box (Apr 27 -> May 16)
+    // by +7 days, landing on Mon May 4 -> Sat May 23 — both already on the
+    // Monday/Saturday lattice, so snapping is a no-op.
+    lastTimelineOptions().onMove(
+      { id: 'r1', start: new Date(2026, 4, 4), end: new Date(2026, 4, 23) },
+      callback,
+    )
+
+    // Both edges shift by the same 7-day drag distance: real start moves
+    // from May 4 to May 11, real (data) end from May 8 to May 15.
+    expect(onItemEdit).toHaveBeenCalledWith({
+      id_col: 'r1',
+      start_col: '2026-05-11 00:00:00',
       end_col: '2026-05-15 00:00:00',
     })
   })

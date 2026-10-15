@@ -2,12 +2,11 @@ import type { TimelineItem } from 'vis-timeline/esnext'
 import { isSourceBItemId } from './secondarySource'
 import type { ItemVisual } from './types'
 
-export function renderItemContent(
+function renderItemBody(
   item: TimelineItem,
-  visualsByItemId: Map<string, ItemVisual>,
+  visual: ItemVisual | undefined,
 ): HTMLElement | string {
   const id = String(item.id)
-  const visual = visualsByItemId.get(id)
   const text = typeof item.content === 'string' ? item.content : ''
   if (!visual) return text
 
@@ -66,4 +65,31 @@ export function renderItemContent(
   link.appendChild(wrapper)
   link.addEventListener('click', (e) => e.stopPropagation())
   return link
+}
+
+function hasClass(item: TimelineItem, name: string): boolean {
+  return typeof item.className === 'string' && item.className.split(' ').includes(name)
+}
+
+export function renderItemContent(
+  item: TimelineItem,
+  visualsByItemId: Map<string, ItemVisual>,
+): HTMLElement | string {
+  const body = renderItemBody(item, visualsByItemId.get(String(item.id)))
+
+  // The actual-dates overlay (buildItems.ts's resolveActualOverlayWidening)
+  // insets the "solid card" look to the real planned span within the item's
+  // own (possibly widened) box, via --planned-left/--planned-right — see
+  // App.css's .ts-planned-inset. Wrapping here, rather than changing what
+  // the outer box itself renders, keeps every other item's DOM untouched.
+  if (!hasClass(item, 'has-actual-overlay')) return body
+
+  const inset = document.createElement('span')
+  inset.className = 'ts-planned-inset'
+  if (typeof body === 'string') {
+    inset.textContent = body
+  } else {
+    inset.appendChild(body)
+  }
+  return inset
 }

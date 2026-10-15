@@ -150,4 +150,46 @@ describe('renderItemContent', () => {
     const out = renderItemContent(item as TimelineItem, visuals)
     expect(out).toBeInstanceOf(HTMLElement)
   })
+
+  test('has-actual-overlay: wraps plain text content in .ts-planned-inset', () => {
+    const visuals = new Map<string, ItemVisual>()
+    const item = {
+      id: 'x',
+      content: 'Task',
+      start: new Date(),
+      className: 'has-actual-overlay',
+    } as TimelineItem
+    const out = renderItemContent(item, visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    const inset = out as HTMLElement
+    expect(inset.className).toBe('ts-planned-inset')
+    expect(inset.textContent).toBe('Task')
+  })
+
+  test('has-actual-overlay: wraps the normal pill/link wrapper, not around it', () => {
+    const visuals = new Map<string, ItemVisual>([
+      ['x', { pill: 'P0', linkUrl: 'https://example.com/r/1' }],
+    ])
+    const item = {
+      id: 'x',
+      content: 'Task',
+      start: new Date(),
+      className: 'has-projection-behind has-actual-overlay',
+    } as TimelineItem
+    const out = renderItemContent(item, visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    const inset = out as HTMLElement
+    expect(inset.className).toBe('ts-planned-inset')
+    const wrapper = inset.firstElementChild as HTMLElement
+    expect(wrapper.className).toBe('ts-item-wrapper')
+    expect(wrapper.querySelector('.ts-pill')?.textContent).toBe('P0')
+    expect(wrapper.querySelector('a.ts-item-link')).not.toBeNull()
+  })
+
+  test('no has-actual-overlay class: no .ts-planned-inset wrapper added', () => {
+    const visuals = new Map<string, ItemVisual>([['x', { pill: 'P0' }]])
+    const out = renderItemContent(makeItem('x', 'Task'), visuals)
+    expect(out).toBeInstanceOf(HTMLElement)
+    expect((out as HTMLElement).className).toBe('ts-item-wrapper')
+  })
 })

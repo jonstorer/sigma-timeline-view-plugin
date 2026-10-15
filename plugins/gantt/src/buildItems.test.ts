@@ -3,12 +3,12 @@ import {
   applyLaneMove,
   buildItemsAndGroups,
   buildPathsForRow,
-  isActualOverlayItemId,
   parseGroupCell,
   parseGroupId,
   parseProgress,
   pathToGroupId,
   resolveActualOverlay,
+  resolveActualOverlayWidening,
   resolveProjection,
   safeId,
 } from './buildItems'
@@ -957,16 +957,37 @@ describe('resolveActualOverlay', () => {
   })
 })
 
-describe('isActualOverlayItemId', () => {
-  test('matches an overlay id built from a main item id', () => {
-    expect(isActualOverlayItemId('r1::actual')).toBe(true)
+describe('resolveActualOverlayWidening', () => {
+  // A 5-day display span: Mon May 4 -> Sat May 9, 2026 (= dayBoundDisplaySpan
+  // of raw dates May 4 -> May 8).
+  const span = { start: new Date(2026, 4, 4), end: new Date(2026, 4, 9) }
+
+  test('actual start earlier and projected actual end later: widens both edges, with insets for the real planned portion', () => {
+    // Overlay: Mon Apr 27 -> display end Wed May 13 (raw May 12 + 1).
+    // Widened box: Apr 27 -> May 13 (16 days). Planned (May 4 -> May 9) sits
+    // 7 days in from the left (43.75%) and 4 days short of the right (25%).
+    const overlay = { start: new Date(2026, 3, 27), end: new Date(2026, 4, 13) }
+    const widened = resolveActualOverlayWidening(span, overlay, undefined)
+    expect(widened.start).toEqual(overlay.start)
+    expect(widened.end).toEqual(overlay.end)
+    expect(widened.style).toContain('--planned-left: 43.75%;')
+    expect(widened.style).toContain('--planned-right: 25%;')
   })
 
-  test('does not match the main item id, other ids, or non-strings', () => {
-    expect(isActualOverlayItemId('r1')).toBe(false)
-    expect(isActualOverlayItemId('b|r1')).toBe(false)
-    expect(isActualOverlayItemId(42)).toBe(false)
-    expect(isActualOverlayItemId(undefined)).toBe(false)
+  test('overlay fully inside the planned span: widened box equals the planned span, insets are 0', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(span, overlay, undefined)
+    expect(widened.start).toEqual(span.start)
+    expect(widened.end).toEqual(span.end)
+    expect(widened.style).toBe('--planned-left: 0%; --planned-right: 0%;')
+  })
+
+  test('appends to an existing base style rather than replacing it', () => {
+    const overlay = { start: new Date(2026, 4, 5), end: new Date(2026, 4, 8) }
+    const widened = resolveActualOverlayWidening(span, overlay, '--item-color: #f00;')
+    expect(widened.style).toBe(
+      '--item-color: #f00; --planned-left: 0%; --planned-right: 0%;',
+    )
   })
 })
 
@@ -979,7 +1000,7 @@ describe('buildItemsAndGroups actual-dates overlay', () => {
     projectedActualEndColumn: 'projected_actual_end_col',
   }
 
-  test('both columns configured and present: a background overlay item alongside the main item', () => {
+  test('both columns configured and present: has-actual-overlay class, no extra item, and a widenedByActualId entry', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -988,39 +1009,23 @@ describe('buildItemsAndGroups actual-dates overlay', () => {
       projected_actual_end_col: ['2026-05-11'],
     }
     const result = buildItemsAndGroups(config, data)
-    expect(result.items).toHaveLength(2)
-    const overlay = result.items.find((i) => isActualOverlayItemId(i.id))
-    expect(overlay).toMatchObject({
-      id: 'r1::actual',
-      type: 'background',
-      start: new Date(2026, 4, 5),
-      end: new Date(2026, 4, 12),
-      className: 'ts-actual-overlay',
-    })
-    // The main item is untouched by the overlay's presence.
-    expect(result.items.find((i) => i.id === 'r1')).toMatchObject({
+    // No separate DataItem — see resolveActualOverlay's doc comment for why
+    // a second type:'background' item couldn't reliably track its own row.
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]).toMatchObject({
+      id: 'r1',
+      className: 'has-actual-overlay',
+      // The main item's own start/end are untouched (unwidened) — widening
+      // is applied by the caller (LiveTimeline), conditionally on the toggle.
       start: new Date(2026, 4, 4),
       end: new Date(2026, 4, 9),
     })
+    const widened = result.widenedByActualId.get('r1')
+    expect(widened?.start).toEqual(new Date(2026, 4, 4)) // actual start (May 5) is after planned start, so unchanged
+    expect(widened?.end).toEqual(new Date(2026, 4, 12)) // projected actual end (May 11) display end
   })
 
-  test('overlay item is scoped to the same group as its main item', () => {
-    const data = {
-      start_col: ['2026-05-04'],
-      end_col: ['2026-05-08'],
-      id_col: ['r1'],
-      group_col: ['Alice'],
-      actual_start_col: ['2026-05-05'],
-      projected_actual_end_col: ['2026-05-11'],
-    }
-    const result = buildItemsAndGroups({ ...config, group: 'group_col' }, data)
-    const main = result.items.find((i) => !isActualOverlayItemId(i.id))
-    const overlay = result.items.find((i) => isActualOverlayItemId(i.id))
-    expect(overlay?.group).toBe(main?.group)
-    expect(overlay?.id).toBe(`${main?.id}::actual`)
-  })
-
-  test('only one of the two columns configured: no overlay item', () => {
+  test('only one of the two columns configured: no overlay class and no widenedByActualId entry', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -1031,10 +1036,11 @@ describe('buildItemsAndGroups actual-dates overlay', () => {
       { ...config, projectedActualEndColumn: undefined },
       data,
     )
-    expect(result.items).toHaveLength(1)
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
   })
 
-  test('neither column configured: no overlay item', () => {
+  test('neither column configured: no overlay class and no widenedByActualId entry', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -1044,10 +1050,11 @@ describe('buildItemsAndGroups actual-dates overlay', () => {
       { startDate: 'start_col', endDate: 'end_col', idColumn: 'id_col' },
       data,
     )
-    expect(result.items).toHaveLength(1)
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
   })
 
-  test('columns configured but the row has no actual-date values: no overlay item', () => {
+  test('columns configured but the row has no actual-date values: no overlay class and no widenedByActualId entry', () => {
     const data = {
       start_col: ['2026-05-04'],
       end_col: ['2026-05-08'],
@@ -1056,7 +1063,22 @@ describe('buildItemsAndGroups actual-dates overlay', () => {
       projected_actual_end_col: [null],
     }
     const result = buildItemsAndGroups(config, data)
-    expect(result.items).toHaveLength(1)
+    expect(result.items[0].className).toBeUndefined()
+    expect(result.widenedByActualId.size).toBe(0)
+  })
+
+  test('multi-group row: each leaf item gets its own widenedByActualId entry', () => {
+    const data = {
+      start_col: ['2026-05-04'],
+      end_col: ['2026-05-08'],
+      id_col: ['r1'],
+      group_col: ['Alice'],
+      actual_start_col: ['2026-05-05'],
+      projected_actual_end_col: ['2026-05-11'],
+    }
+    const result = buildItemsAndGroups({ ...config, group: 'group_col' }, data)
+    const item = result.items[0]
+    expect(result.widenedByActualId.has(String(item.id))).toBe(true)
   })
 })
 

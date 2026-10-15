@@ -252,41 +252,6 @@
   );
 }
 
-/* Actual-dates overlay (buildItems.ts's resolveActualOverlay): a translucent
-   band spanning Actual Start -> Projected Actual End, behind the planned bar
-   (background items render behind range items) and scoped to its own row via
-   `group`. Slimmer than the full lane and vertically centered so it reads as
-   a second, independent span rather than a full-height wash like the weekend
-   bands above — wherever actual dates diverge from planned, it pokes out past
-   the solid bar's edges, showing slippage directly.
-   The visible band is a `::before`, not styling on the box itself: vis-
-   timeline sets a grouped background item's box to the exact per-row pixel
-   height inline on every redraw (correct), but that box isn't itself a CSS
-   positioning context with a reliably-scoped height for percentages to
-   resolve against — a `top`/`height` percentage on the box directly was
-   found to resolve against a much taller ancestor (looked like one giant
-   band spanning every row). The box (absolutely positioned via the base
-   `.vis-item` rule) IS a valid containing block for its own `::before`
-   child, so percentages on *that* correctly resolve against the box's own
-   (correctly per-row-sized) dimensions instead. */
-.timeline-host .vis-item.vis-background.ts-actual-overlay {
-  background-color: transparent;
-  border: none;
-}
-.timeline-host .vis-item.vis-background.ts-actual-overlay::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 70%;
-  transform: translateY(-50%);
-  background-color: rgba(245, 158, 11, 0.18);
-  border: 1px dashed rgba(245, 158, 11, 0.5);
-  border-radius: 10px;
-  box-sizing: border-box;
-}
-
 /* Parent header rows (groups with nestedGroups). `ts-parent-group` is set on
    BOTH the label and the foreground body so their heights + background match
    (vis only applies its own `.vis-nesting-group` to the label side). The
@@ -413,6 +378,103 @@
 }
 .timeline-host .vis-item.vis-range .vis-item-overflow {
   overflow: hidden;
+}
+
+/* Actual-dates overlay (buildItems.ts's resolveActualOverlayWidening): a
+   translucent, dashed-border band spanning Actual Start -> Projected Actual
+   End, behind the real planned bar — wherever actual dates diverge from
+   planned, it pokes out past the solid bar's edges, showing slippage
+   directly. Independent of the projected-completion overlay above.
+
+   This used to be a separate `type:'background'` DataItem scoped to the
+   row's `group`, but vis-timeline can only scope a background item to a
+   whole group/lane, not to whichever row its own dynamic stacking placed a
+   specific item on — every item sharing a lane rendered its overlay at the
+   same (wrong, jittery-on-scroll) spot. Fixed by widening the item's OWN
+   box to the union of its planned + actual-overlay spans (same trick
+   `resolveProjection`'s "behind" case already uses) and rendering the real
+   "solid card" look on an inner `.ts-planned-inset` wrapper (templates.ts),
+   inset from the wider box's edges via --planned-left/--planned-right. The
+   outer box — now wider than the planned bar whenever they diverge — is what
+   shows the translucent/dashed look; .ts-planned-inset's own background
+   covers it everywhere except the overhang, so the overhang is the only
+   part where the translucent look is actually visible.
+
+   The split exists (an extra wrapper + these two rule sets) whenever a row
+   has both actual-dates columns configured, regardless of whether the
+   toggle is currently on — only the --planned-left/--planned-right values
+   change (defaulting to 0%, i.e. full coverage, when unset), so toggling
+   never changes which element paints the "card" look, only how far
+   .ts-planned-inset insets from the edges. */
+.timeline-host .vis-item.vis-range.has-actual-overlay {
+  background: none;
+  box-shadow: none;
+}
+/* vis-timeline's own bundled CSS sets `.vis-item-content { position:
+   relative; display: inline-block; }` — an inline-block shrink-wraps to its
+   normal-flow content, but .ts-planned-inset is `position: absolute` (removed
+   from flow), so with nothing left to shrink-wrap around, .vis-item-content
+   collapsed to near its own padding box (~22px) and .ts-planned-inset's
+   percentages were resolving against THAT tiny box instead of the item's
+   real width (confirmed live: every item with an actual-overlay rendered as
+   a content-less sliver, regardless of its real date span or the toggle).
+   Neutralizing position/display here lets .ts-planned-inset's absolute
+   positioning fall through to the next positioned ancestor — vis's own
+   `.vis-item-overflow`, which IS already sized to the item's full, correct
+   width (`width: 100%` of `.vis-item`, per vis's bundled CSS). Padding moves
+   from here onto .ts-planned-inset itself, since this element no longer
+   renders any visible box of its own. */
+.timeline-host .vis-item.vis-range.has-actual-overlay .vis-item-content {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+.timeline-host .vis-item.vis-range.has-actual-overlay .ts-planned-inset {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--planned-left, 0%);
+  right: var(--planned-right, 0%);
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow:
+    inset 4px 0 0 var(--item-color, #6b7280),
+    0 2px 6px rgba(15, 23, 42, 0.14);
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 4px 10px 4px 12px;
+  line-height: 18px;
+}
+/* Progress fill moves onto .ts-planned-inset too — its width is always the
+   real (unwidened) item's own width, even when the outer box is widened, so
+   the existing --progress percentage (relative to .ts-planned-inset's own
+   width) stays correct with no rescaling needed, unlike the projection
+   "behind" case which widens the SAME box the fill lives in. */
+.timeline-host .vis-item.vis-range.has-actual-overlay.has-progress .ts-planned-inset {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--item-color, #6b7280) 26%, #fff) var(--progress, 0%),
+    #fff var(--progress, 0%)
+  );
+}
+/* The translucent, dashed "actual" band only appears while the toggle is on
+   — same host-level-class gating pattern as .show-projection below. */
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay {
+  background-color: rgba(245, 158, 11, 0.18);
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+/* Suppress the projected-completion marker on an item whose box is being
+   governed by the actual-dates overlay instead — composing both overlays'
+   independently-computed ratios in one box is out of scope (rare to have
+   both configured and toggled on for the same row at once); toggling either
+   off restores the other's normal behavior immediately for that item. */
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay.has-projection-ahead::after,
+.timeline-host.show-actual-dates .vis-item.vis-range.has-actual-overlay.has-projection-behind::after {
+  display: none !important;
 }
 
 /* Projected-completion overlay — one mechanism for both directions now (see
