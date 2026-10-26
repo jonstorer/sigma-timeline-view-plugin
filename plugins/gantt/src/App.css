@@ -245,9 +245,13 @@
   box-shadow: inset 0 -1px 0 #94a3b8;
 }
 /* Grey backdrop for the timeline body: weekday lanes read grey, and weekend
-   bands render over this, behind the item bars. */
+   bands render over this, behind the item bars. Slightly darker than the
+   left rail's #f3f3f3 (which stays matched to the surrounding workbook grey
+   — see that rule's comment) — paired with the border above, this extra bit
+   of contrast is what actually held up in a real presentation; the rail
+   doesn't carry item bars, so it didn't need the same treatment. */
 .timeline-host .vis-panel.vis-center {
-  background: #f3f3f3;
+  background: #ececef;
 }
 
 /* Weekend shading — a two-tone band per weekend (Saturday = lighter left half,
@@ -341,7 +345,15 @@
    buildItems.ts. */
 .timeline-host .vis-item.vis-range {
   background: #ffffff;
-  border: none;
+  /* A visible border, not just the soft drop-shadow below, for definition
+     that survives conditions the shadow alone doesn't: screen-share/video
+     compression and projectors both tend to crush a soft, low-contrast
+     shadow before they crush a hard 1px edge — confirmed from a photo of a
+     real presentation where the white-on-#f3f3f3 bars were barely visible
+     at all. box-sizing keeps this border inside the already-specified
+     min-height/strip-height math instead of adding to it. */
+  border: 1px solid #d1d5db;
+  box-sizing: border-box;
   /* Square corners, not rounded: a projection or actual-dates strip can
      extend past the planned bar's own edges, and a gradient/pseudo-element
      can't do PARTIAL rounding (round the box's true far ends but not the
