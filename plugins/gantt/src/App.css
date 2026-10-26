@@ -345,12 +345,18 @@
    buildItems.ts. */
 .timeline-host .vis-item.vis-range {
   background: #ffffff;
-  /* TEMPORARY diagnostic: exaggerated 3px black border (not the final
-     design) so the item's real rendered edges are unmistakable in a
-     screenshot, to pin down whether an outline/strip is actually scoped to
-     one bar's own boundary or not. Revert to a subtle border once that's
-     settled — see the PR for the real (1px #d1d5db) version this replaced. */
-  border: 3px solid #000000;
+  /* A visible border, not just the soft drop-shadow below, for definition
+     that survives conditions the shadow alone doesn't: screen-share/video
+     compression and projectors both tend to crush a soft, low-contrast
+     shadow before they crush a hard edge — confirmed from a photo of a real
+     presentation where the white-on-#f3f3f3 bars were barely visible at
+     all. A plain item (no projection/actual-overlay) is the whole card, so
+     this border wraps the whole element correctly; see the has-projection-*/
+     has-actual-overlay override below for why the sandwich layout needs a
+     different approach instead of just inheriting this. box-sizing keeps
+     the border inside the already-specified min-height/strip-height math
+     instead of adding to it. */
+  border: 1px solid #6b7280;
   box-sizing: border-box;
   /* Square corners, not rounded: a projection or actual-dates strip can
      extend past the planned bar's own edges, and a gradient/pseudo-element
@@ -443,6 +449,14 @@
 .timeline-host .vis-item.vis-range.has-actual-overlay {
   background-color: transparent;
   box-shadow: none;
+  /* The base item border (see the plain-item rule above) would otherwise
+     wrap the WHOLE sandwich — strips included — reading as "one big box"
+     instead of the planned bar standing out on its own. Replaced below with
+     a border-frame confined to just the planned card's own region (left
+     edge is the existing colored accent stripe; top/bottom/right are new
+     gradient layers) — see that rule's comment for why a real CSS `border`
+     can't do a sub-region of one element. */
+  border: none;
 }
 /* Each strip adds its own 8px (6px strip + 2px gap) to the item's min-
    height, via a custom property rather than two directly-conflicting
@@ -475,14 +489,66 @@
    instead of centered in the item's full height. Also not gated behind the
    toggle classes, for the same reason as the strip-space custom properties
    above — the card stays put in its own band even while a strip's content is
-   hidden, rather than re-centering into the (still reserved) empty space. */
+   hidden, rather than re-centering into the (still reserved) empty space.
+
+   Three more layers paint a border FRAME around just this card — top edge,
+   bottom edge, right edge — so the planned bar visibly stands out on its
+   own, distinct from the projection/actual strips above and below it,
+   instead of a single border wrapping the whole sandwich (confirmed live:
+   that read as "one big box" with the three zones blurred together). The
+   left edge doesn't need its own frame line — the existing accent stripe
+   already reads as a left border, just colored instead of grey — avoiding
+   the two overlapping right on top of each other at --planned-left. Each
+   edge is its own gradient (rather than trying to combine all three into
+   fewer layers) since a 1D linear-gradient can't vary along one axis AND
+   stay confined along the other at the same time.
+
+   Listed FIRST (earlier layers paint on top): the fill layer is opaque
+   across virtually all of the card's own width, so if it were listed before
+   the frame layers it would completely paint over them — confirmed live,
+   the frame was computing correctly but invisible until this reorder. */
 .timeline-host .vis-item.vis-range.has-projection-ahead,
 .timeline-host .vis-item.vis-range.has-projection-behind,
 .timeline-host .vis-item.vis-range.has-actual-overlay {
   background-repeat: no-repeat;
-  background-size: 100% 26px;
-  background-position: 0 var(--top-strip-space, 0px);
+  background-size:
+    100% 1px,
+    100% 1px,
+    100% 26px,
+    100% 26px,
+    100% 26px;
+  background-position:
+    0 var(--top-strip-space, 0px),
+    0 calc(var(--top-strip-space, 0px) + 25px),
+    0 var(--top-strip-space, 0px),
+    0 var(--top-strip-space, 0px),
+    0 var(--top-strip-space, 0px);
   background-image:
+    /* top edge */
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #6b7280 var(--planned-left, 0%),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
+    /* bottom edge */
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #6b7280 var(--planned-left, 0%),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
+    /* right edge */
+    linear-gradient(
+      to right,
+      transparent calc(100% - var(--planned-right, 0%) - 1px),
+      #6b7280 calc(100% - var(--planned-right, 0%) - 1px),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
+    /* left accent */
     linear-gradient(
       to right,
       transparent var(--planned-left, 0%),
@@ -490,6 +556,7 @@
       var(--item-color, #6b7280) calc(var(--planned-left, 0%) + 4px),
       transparent calc(var(--planned-left, 0%) + 4px)
     ),
+    /* fill */
     linear-gradient(
       to right,
       transparent var(--planned-left, 0%),
@@ -518,7 +585,33 @@
 .timeline-host .vis-item.vis-range.has-projection-ahead.has-progress,
 .timeline-host .vis-item.vis-range.has-projection-behind.has-progress,
 .timeline-host .vis-item.vis-range.has-actual-overlay.has-progress {
+  /* Same border-frame + accent + fill layer order as the plain card above
+     (frame first so the opaque fill doesn't paint over it) — this rule
+     fully replaces background-image, since background-size/
+     background-position (5 layers' worth) are declared once on that other
+     rule and still apply here. */
   background-image:
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #6b7280 var(--planned-left, 0%),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
+    linear-gradient(
+      to right,
+      transparent var(--planned-left, 0%),
+      #6b7280 var(--planned-left, 0%),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(100% - var(--planned-right, 0%) - 1px),
+      #6b7280 calc(100% - var(--planned-right, 0%) - 1px),
+      #6b7280 calc(100% - var(--planned-right, 0%)),
+      transparent calc(100% - var(--planned-right, 0%))
+    ),
     linear-gradient(
       to right,
       transparent var(--planned-left, 0%),
