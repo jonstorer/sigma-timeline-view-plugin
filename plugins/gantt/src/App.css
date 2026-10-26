@@ -345,14 +345,12 @@
    buildItems.ts. */
 .timeline-host .vis-item.vis-range {
   background: #ffffff;
-  /* A visible border, not just the soft drop-shadow below, for definition
-     that survives conditions the shadow alone doesn't: screen-share/video
-     compression and projectors both tend to crush a soft, low-contrast
-     shadow before they crush a hard 1px edge — confirmed from a photo of a
-     real presentation where the white-on-#f3f3f3 bars were barely visible
-     at all. box-sizing keeps this border inside the already-specified
-     min-height/strip-height math instead of adding to it. */
-  border: 1px solid #d1d5db;
+  /* TEMPORARY diagnostic: exaggerated 3px black border (not the final
+     design) so the item's real rendered edges are unmistakable in a
+     screenshot, to pin down whether an outline/strip is actually scoped to
+     one bar's own boundary or not. Revert to a subtle border once that's
+     settled — see the PR for the real (1px #d1d5db) version this replaced. */
+  border: 3px solid #000000;
   box-sizing: border-box;
   /* Square corners, not rounded: a projection or actual-dates strip can
      extend past the planned bar's own edges, and a gradient/pseudo-element
