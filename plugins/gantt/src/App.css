@@ -351,9 +351,10 @@
      shadow before they crush a hard edge — confirmed from a photo of a real
      presentation where the white-on-#f3f3f3 bars were barely visible at
      all. A plain item (no projection/actual-overlay) is the whole card, so
-     this border wraps the whole element correctly; see the has-projection-*/
-     has-actual-overlay override below for why the sandwich layout needs a
-     different approach instead of just inheriting this. box-sizing keeps
+     this border wraps the whole element correctly; see the
+     has-projection-ahead/has-projection-behind/has-actual-overlay override
+     below for why the sandwich layout needs a different approach instead of
+     just inheriting this. box-sizing keeps
      the border inside the already-specified min-height/strip-height math
      instead of adding to it. */
   border: 1px solid #6b7280;
