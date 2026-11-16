@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   plugins: [react()],
-  server: { port: 3031 },
+  server: { port: 5173 },
   // Deployed under /markdown/, not the domain root (see scripts/deploy.sh) —
   // Vite defaults to root-absolute asset paths in the built index.html, which
   // 404s once the app is actually served from a subdirectory (see the gantt

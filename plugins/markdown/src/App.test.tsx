@@ -59,6 +59,70 @@ describe('App', () => {
     expect(getByText('2026-10-06')).toBeInTheDocument()
   })
 
+  const corners = [
+    { name: 'top left', labelConfig: 'topLeftColumn', urlConfig: 'topLeftUrlColumn' },
+    { name: 'top right', labelConfig: 'topRightColumn', urlConfig: 'topRightUrlColumn' },
+    { name: 'bottom left', labelConfig: 'bottomLeftColumn', urlConfig: 'bottomLeftUrlColumn' },
+    { name: 'bottom right', labelConfig: 'bottomRightColumn', urlConfig: 'bottomRightUrlColumn' },
+  ] as const
+
+  test.each(corners)(
+    '$name renders as a link that opens in a new tab when a URL column is set',
+    ({ labelConfig, urlConfig }) => {
+      vi.mocked(useConfig).mockReturnValue({
+        source: 'element-1',
+        bodyColumn: 'body',
+        [labelConfig]: 'label',
+        [urlConfig]: 'url',
+      })
+      vi.mocked(useElementData).mockReturnValue({
+        body: ['text'],
+        label: ['2026-10-06'],
+        url: ['https://example.com/release'],
+      })
+      const { getByText } = render(<App />)
+      const link = getByText('2026-10-06')
+      expect(link.tagName).toBe('A')
+      expect(link).toHaveAttribute('href', 'https://example.com/release')
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    },
+  )
+
+  test.each(corners)(
+    '$name renders as plain text when no URL column is set',
+    ({ labelConfig }) => {
+      vi.mocked(useConfig).mockReturnValue({
+        source: 'element-1',
+        bodyColumn: 'body',
+        [labelConfig]: 'label',
+      })
+      vi.mocked(useElementData).mockReturnValue({
+        body: ['text'],
+        label: ['2026-10-06'],
+      })
+      const { getByText } = render(<App />)
+      expect(getByText('2026-10-06').tagName).toBe('SPAN')
+    },
+  )
+
+  test.each(corners)(
+    'a $name URL with no label renders nothing for that corner',
+    ({ urlConfig }) => {
+      vi.mocked(useConfig).mockReturnValue({
+        source: 'element-1',
+        bodyColumn: 'body',
+        [urlConfig]: 'url',
+      })
+      vi.mocked(useElementData).mockReturnValue({
+        body: ['text'],
+        url: ['https://example.com/release'],
+      })
+      const { container } = render(<App />)
+      expect(container.querySelectorAll('.md-corner')).toHaveLength(0)
+    },
+  )
+
   test('corners are optional — omitting them renders only the body, no example layout', () => {
     vi.mocked(useConfig).mockReturnValue({
       source: 'element-1',

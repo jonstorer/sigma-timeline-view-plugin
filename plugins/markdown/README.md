@@ -3,7 +3,8 @@
 A Sigma plugin that renders a Markdown column as a list of cards: one
 required Body column, plus four optional columns anchored to each corner
 (top left, top right, bottom left, bottom right) for metadata like an
-author, a tag, a date, a status.
+author, a tag, a date, a status. Each corner also has its own optional URL
+column — when set, that corner renders as a link instead of plain text.
 
 Bind it directly to your table — it renders **every row**, not just one.
 It is not meant to go inside a Repeated Container: Sigma's per-row scoping
@@ -27,7 +28,7 @@ npm install && npm run dev
 ```
 
 Then in Sigma, drop a "Plugin Dev Playground" element on a workbook page and
-point it at `http://localhost:3031`.
+point it at `http://localhost:5173`.
 
 ## Editor-panel config
 
@@ -36,9 +37,13 @@ point it at `http://localhost:3031`.
 | `source` | element | The data source (worksheet / table). |
 | `bodyColumn` | column (text only) | Required. The column holding Markdown text. |
 | `topLeftColumn` | column (any type) | Optional. Rendered as plain text, anchored to the top-left corner. |
+| `topLeftUrlColumn` | column (any type) | Optional. If set, the top-left corner renders as a link to this URL instead of plain text. |
 | `topRightColumn` | column (any type) | Optional. Rendered as plain text, anchored to the top-right corner. |
+| `topRightUrlColumn` | column (any type) | Optional. If set, the top-right corner renders as a link to this URL instead of plain text. |
 | `bottomLeftColumn` | column (any type) | Optional. Rendered as plain text, anchored to the bottom-left corner. |
+| `bottomLeftUrlColumn` | column (any type) | Optional. If set, the bottom-left corner renders as a link to this URL instead of plain text. |
 | `bottomRightColumn` | column (any type) | Optional. Rendered as plain text, anchored to the bottom-right corner. |
+| `bottomRightUrlColumn` | column (any type) | Optional. If set, the bottom-right corner renders as a link to this URL instead of plain text. |
 
 The four corner columns deliberately accept any column type (text, number,
 date, a calculated field, etc.) and are coerced to a string for display —
@@ -48,9 +53,20 @@ column or a calculated column — the plugin just renders whatever value
 Sigma resolves for it. No edit payload, no actions, no select wiring — this
 plugin only reads and renders.
 
+Each corner's URL column is independent of its label column — a label with
+no URL renders as plain text (today's behavior, unchanged); a URL with no
+label renders nothing for that corner, since there's no text to show as a
+link. The link opens in a new tab (`target="_blank" rel="noopener
+noreferrer"`) so clicking it doesn't navigate the embedded workbook away.
+
 Renaming or removing a field here orphans any value already stored under
 its old name in a workbook — Sigma doesn't migrate it, it just stops
 showing up. Expect to re-pick columns after a config shape change.
+
+If a newly-picked URL column doesn't seem to take effect (the corner stays
+plain text even though the picker shows a value), this has been observed as
+a Sigma-side config-persistence quirk in the editor panel, not a plugin bug
+— removing and re-picking the column a couple of times gets it to stick.
 
 ## Behavior
 
