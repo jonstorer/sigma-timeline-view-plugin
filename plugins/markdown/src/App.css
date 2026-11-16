@@ -87,6 +87,15 @@
   white-space: nowrap;
 }
 
+a.md-corner {
+  color: var(--accent, #6366f1);
+  text-decoration: none;
+}
+
+a.md-corner:hover {
+  text-decoration: underline;
+}
+
 .md-corner-tl {
   top: 4px;
   left: 4px;

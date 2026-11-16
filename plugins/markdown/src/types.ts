@@ -9,7 +9,11 @@ export interface MarkdownConfig {
   source?: string
   bodyColumn?: string
   topLeftColumn?: string
+  topLeftUrlColumn?: string
   topRightColumn?: string
+  topRightUrlColumn?: string
   bottomLeftColumn?: string
+  bottomLeftUrlColumn?: string
   bottomRightColumn?: string
+  bottomRightUrlColumn?: string
 }
