@@ -200,9 +200,9 @@ formula a workbook-level decision you can change without a plugin deploy.
 
 A checkbox in the header's display settings menu ("Show projected
 completion") only appears once this slot is configured, and toggles the
-overlay on/off. Checked by default once the column is configured — it's an
-opt-out, not an opt-in. It's a plain UI toggle — it doesn't persist across
-reloads and isn't wired to a Sigma variable.
+overlay on/off. Unchecked by default even once the column is configured —
+it's an opt-in, not an opt-out. It's a plain UI toggle — it doesn't persist
+across reloads and isn't wired to a Sigma variable.
 
 **Visual.** A small strip directly above the planned bar (not inline with
 it — see [Actual dates](#actual-dates-optional) for why), comparing the
@@ -272,11 +272,11 @@ strip's content, it doesn't change row height or reflow neighboring rows.
 
 A checkbox in the header's display settings menu ("Show actual dates") only
 appears once both slots are configured, same conditional-appearance pattern
-as the projected-completion checkbox. Checked by default once the columns
-are configured — it's an opt-out, not an opt-in. It's a plain UI toggle, it
-doesn't persist across reloads and isn't wired to a Sigma variable. Hiding
-Source A also hides the overlay even while the checkbox is checked, since
-the overlay is Source-A-only.
+as the projected-completion checkbox. Unchecked by default even once the
+columns are configured — it's an opt-in, not an opt-out. It's a plain UI
+toggle, it doesn't persist across reloads and isn't wired to a Sigma
+variable. Hiding Source A also hides the overlay even while the checkbox is
+checked, since the overlay is Source-A-only.
 
 ### Second source (optional)
 
@@ -349,10 +349,11 @@ actual dates** (only once both `actualStartColumn` and
 `projectedActualEndColumn` are configured) all affect the roadmap, so they're
 listed together; **Show Source B** (only once `sourceB` is configured) sits
 below a divider since it's an unrelated read-only on-call schedule overlay,
-not another roadmap signal. The projection and actual-dates checkboxes
-default to **checked** once their columns are configured — they're an
-opt-out, not an opt-in. The menu stays open while you check things inside
-it; it only closes on an outside click.
+not another roadmap signal. Both the projected-completion and actual-dates
+checkboxes default to **unchecked** even once their columns are configured
+— they're overlays a viewer turns on when they want them, not ones that show
+up unasked. The menu stays open while you check things inside it; it only
+closes on an outside click.
 
 | Slot | Type | Purpose |
 |---|---|---|

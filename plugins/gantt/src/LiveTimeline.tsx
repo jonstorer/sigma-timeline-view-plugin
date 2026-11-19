@@ -146,17 +146,16 @@ export function LiveTimeline({
   const onItemEditRef = useRef<typeof onItemEdit>(onItemEdit)
   const onItemSelectRef = useRef<typeof onItemSelect>(onItemSelect)
   const weekendIdsRef = useRef<string[]>([])
-  // Whether the projected-completion overlay is shown. On by default — once
-  // a row has the data to show (projectedEndColumn configured), the overlay
-  // is meant to always be visible, with the checkbox there to turn it OFF
-  // rather than opt it in. For an ahead-of-schedule item this is a pure CSS
-  // toggle (the `show-projection` class below gates a rule already baked
-  // into the item's style/className). For a behind-schedule item it also
-  // substitutes the item's widened display end into the synced DataSet (see
-  // the items/groups sync effect) — read via showProjectionRef inside
-  // onMove, which needs the live value to decide whether to compensate drag
-  // write-back math.
-  const [showProjection, setShowProjection] = useState(true)
+  // Whether the projected-completion overlay is shown. Off by default — the
+  // checkbox is an opt-in a viewer can turn ON once a row has the data to
+  // show (projectedEndColumn configured). For an ahead-of-schedule item this
+  // is a pure CSS toggle (the `show-projection` class below gates a rule
+  // already baked into the item's style/className). For a behind-schedule
+  // item it also substitutes the item's widened display end into the synced
+  // DataSet (see the items/groups sync effect) — read via showProjectionRef
+  // inside onMove, which needs the live value to decide whether to
+  // compensate drag write-back math.
+  const [showProjection, setShowProjection] = useState(false)
   const showProjectionRef = useRef(showProjection)
   // Source A shows by default; source B starts hidden so it doesn't crowd
   // the primary source's own items on first load. Each checkbox only hides
@@ -166,12 +165,12 @@ export function LiveTimeline({
   const [hideSourceA, setHideSourceA] = useState(false)
   const [hideSourceB, setHideSourceB] = useState(true)
   // Independent of showProjection — a separate, optional overlay sourced
-  // from its own pair of columns (see resolveActualOverlay). On by default,
-  // same reasoning as showProjection above: once a row has actual-dates data
-  // configured, show it — the checkbox is an opt-out, not an opt-in. Read
-  // inside onMove (via showActualDatesRef) for the same reason as
-  // showProjectionRef: drag write-back needs to know whether to compensate.
-  const [showActualDates, setShowActualDates] = useState(true)
+  // from its own pair of columns (see resolveActualOverlay). Off by default,
+  // same reasoning as showProjection above: the checkbox is an opt-in a
+  // viewer turns ON once a row has actual-dates data configured. Read inside
+  // onMove (via showActualDatesRef) for the same reason as showProjectionRef:
+  // drag write-back needs to know whether to compensate.
+  const [showActualDates, setShowActualDates] = useState(false)
   const showActualDatesRef = useRef(showActualDates)
   // Display settings (the three show/hide checkboxes) live behind a gear
   // button rather than always-visible header checkboxes.
