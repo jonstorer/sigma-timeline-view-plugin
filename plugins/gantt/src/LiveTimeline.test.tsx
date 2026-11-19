@@ -182,12 +182,6 @@ describe('LiveTimeline', () => {
 
 describe('LiveTimeline projection toggle', () => {
   test('hides the checkbox when no projectedEndColumn is configured', () => {
-    // showProjection defaults to true regardless of config (see LiveTimeline
-    // — it doesn't know the column is missing until render), so
-    // .timeline-host still gets the show-projection class here; that's
-    // harmless since no item can have has-projection-ahead/behind without
-    // the column. The checkbox itself — the only thing a user can see — is
-    // what actually needs to stay hidden.
     const { getByLabelText, queryByLabelText } = render(
       <LiveTimeline config={oneRowConfig} data={oneRowData} />,
     )
@@ -195,7 +189,7 @@ describe('LiveTimeline projection toggle', () => {
     expect(queryByLabelText(/show projected completion/i)).not.toBeInTheDocument()
   })
 
-  test('shows the checkbox, checked by default, when projectedEndColumn is configured', () => {
+  test('shows the checkbox, unchecked by default, when projectedEndColumn is configured', () => {
     const { getByLabelText, container } = render(
       <LiveTimeline
         config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
@@ -204,8 +198,8 @@ describe('LiveTimeline projection toggle', () => {
     )
     fireEvent.click(getByLabelText(/display settings/i))
     const checkbox = getByLabelText(/show projected completion/i)
-    expect(checkbox).toBeChecked()
-    expect(container.querySelector('.timeline-host')).toHaveClass(
+    expect(checkbox).not.toBeChecked()
+    expect(container.querySelector('.timeline-host')).not.toHaveClass(
       'show-projection',
     )
   })
@@ -227,14 +221,14 @@ describe('LiveTimeline projection toggle', () => {
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
     const removeSpy = vi.spyOn(DataSet.prototype, 'remove')
 
-    // Starts checked (on by default) — first click turns it off.
-    fireEvent.click(checkbox)
-    expect(checkbox).not.toBeChecked()
-    expect(host).not.toHaveClass('show-projection')
-
+    // Starts unchecked (off by default) — first click turns it on.
     fireEvent.click(checkbox)
     expect(checkbox).toBeChecked()
     expect(host).toHaveClass('show-projection')
+
+    fireEvent.click(checkbox)
+    expect(checkbox).not.toBeChecked()
+    expect(host).not.toHaveClass('show-projection')
 
     expect(removeSpy).not.toHaveBeenCalledWith('r1')
     expect(addSpy).not.toHaveBeenCalledWith(
@@ -259,13 +253,13 @@ describe('LiveTimeline projection toggle', () => {
     fireEvent.click(getByLabelText(/display settings/i))
     const checkbox = getByLabelText(/show projected completion/i)
 
-    // Starts checked (on by default, already widened) — first click turns it
-    // off, unwidening back to the real end.
+    // Starts unchecked (off by default, real end) — first click turns it on,
+    // widening to the projected display end.
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
     fireEvent.click(checkbox)
     expect(addSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
       ]),
     )
     addSpy.mockRestore()
@@ -274,7 +268,7 @@ describe('LiveTimeline projection toggle', () => {
     fireEvent.click(checkbox)
     expect(secondAddSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
       ]),
     )
     secondAddSpy.mockRestore()
@@ -312,12 +306,12 @@ describe('LiveTimeline actual-dates toggle', () => {
     expect(queryByLabelText(/show actual dates/i)).not.toBeInTheDocument()
   })
 
-  test('shows the checkbox, checked by default, when both columns are configured', () => {
+  test('shows the checkbox, unchecked by default, when both columns are configured', () => {
     const { getByLabelText } = render(
       <LiveTimeline config={actualDatesConfig} data={actualDatesData} />,
     )
     fireEvent.click(getByLabelText(/display settings/i))
-    expect(getByLabelText(/show actual dates/i)).toBeChecked()
+    expect(getByLabelText(/show actual dates/i)).not.toBeChecked()
   })
 
   test('toggling widens/unwidens the item\'s own box in the DataSet, independent of the projection toggle', () => {
@@ -334,11 +328,10 @@ describe('LiveTimeline actual-dates toggle', () => {
     fireEvent.click(getByLabelText(/display settings/i))
     const actualCheckbox = getByLabelText(/show actual dates/i)
     const projectionCheckbox = getByLabelText(/show projected completion/i)
-    // Both start checked by default — turn projection off so this test
-    // isolates the actual-dates toggle's own behavior.
-    fireEvent.click(projectionCheckbox)
+    // Both start unchecked (off by default) and projection is left alone
+    // here, so this test isolates the actual-dates toggle's own behavior.
     expect(projectionCheckbox).not.toBeChecked()
-    expect(actualCheckbox).toBeChecked()
+    expect(actualCheckbox).not.toBeChecked()
 
     // actual_start_col (May 2) is after the planned start (May 1), so the
     // start is unchanged; projected_actual_end_col (May 11) widens the end
@@ -346,20 +339,20 @@ describe('LiveTimeline actual-dates toggle', () => {
     // the real end (May 9) when turned off.
     const addSpy = vi.spyOn(DataSet.prototype, 'add')
     fireEvent.click(actualCheckbox)
-    expect(actualCheckbox).not.toBeChecked()
+    expect(actualCheckbox).toBeChecked()
     expect(addSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
       ]),
     )
     addSpy.mockRestore()
 
     const secondAddSpy = vi.spyOn(DataSet.prototype, 'add')
     fireEvent.click(actualCheckbox)
-    expect(actualCheckbox).toBeChecked()
+    expect(actualCheckbox).not.toBeChecked()
     expect(secondAddSpy).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 12) }),
+        expect.objectContaining({ id: 'r1', end: new Date(2026, 4, 9) }),
       ]),
     )
     secondAddSpy.mockRestore()
@@ -667,15 +660,18 @@ describe('LiveTimeline drag editing', () => {
     // Base span: Mon May 4 -> Sat May 9 (display). Projected last day Mon
     // May 18 -> widened display end Tue May 19 (a 10-day overrun).
     const onItemEdit = vi.fn()
-    render(
+    const { getByLabelText } = render(
       <LiveTimeline
         config={{ ...oneRowConfig, projectedEndColumn: 'projected_col' }}
         data={{ ...oneRowData, projected_col: ['2026-05-18'] }}
         onItemEdit={onItemEdit}
       />,
     )
-    // The toggle is on by default, so the item is already rendered widened —
-    // the compensation only applies while showProjection is true.
+    // The toggle is off by default — turn it on so the item is rendered
+    // widened, since the compensation only applies while showProjection is
+    // true.
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show projected completion/i))
 
     const callback = vi.fn()
     // Simulate the user dragging the (widened) right edge from Tue May 19
@@ -702,7 +698,7 @@ describe('LiveTimeline drag editing', () => {
     // (7 days earlier) and projected actual end Fri May 15 -> display end
     // Sat May 16 (7 days later) -- both edges widen by 7 days.
     const onItemEdit = vi.fn()
-    render(
+    const { getByLabelText } = render(
       <LiveTimeline
         config={{
           ...oneRowConfig,
@@ -719,8 +715,11 @@ describe('LiveTimeline drag editing', () => {
         onItemEdit={onItemEdit}
       />,
     )
-    // The toggle is on by default, so the item is already rendered widened —
-    // the compensation only applies while showActualDates is true.
+    // The toggle is off by default — turn it on so the item is rendered
+    // widened, since the compensation only applies while showActualDates is
+    // true.
+    fireEvent.click(getByLabelText(/display settings/i))
+    fireEvent.click(getByLabelText(/show actual dates/i))
 
     const callback = vi.fn()
     // Simulate a body drag shifting the whole widened box (Apr 27 -> May 16)
